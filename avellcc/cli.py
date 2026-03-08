@@ -219,10 +219,24 @@ def restore_lightbar_state(lightbar_state: dict | None, ctrl: ITE8911 | None = N
 
 
 # ---------------------------------------------------------------------------
-# Subcommand: keyboard  (was: led)
+# Subcommand: keyboard
 # ---------------------------------------------------------------------------
 
 def cmd_keyboard(args):
+    action = getattr(args, 'action', None)
+
+    # --- Sub-actions ---
+    if action == 'keys':
+        _keyboard_keys(args)
+        return
+    if action == 'calibrate':
+        _keyboard_calibrate()
+        return
+    if action == 'firmware':
+        _keyboard_firmware()
+        return
+
+    # --- LED control ---
     ctrl = ITE8295()
     ctrl.open()
     try:
@@ -274,7 +288,7 @@ def cmd_keyboard(args):
                 keymap = load_keymap()
                 pos = get_key_position(args.key, keymap)
                 if pos is None:
-                    print(f"Unknown key: '{args.key}'. Use 'avellcc keys' to list keys.")
+                    print(f"Unknown key: '{args.key}'. Use 'avellcc keyboard keys' to list keys.")
                     sys.exit(1)
                 ctrl.set_key_color(pos[0], pos[1], r, g, b)
                 state.setdefault('per_key', {})[args.key.lower()] = [r, g, b]
@@ -296,6 +310,69 @@ def cmd_keyboard(args):
         if state:
             bundle['keyboard'] = state
             save_state_bundle(bundle)
+    finally:
+        ctrl.close()
+
+
+def _keyboard_keys(args):
+    keymap = load_keymap()
+    keys = list_keys(keymap)
+    if getattr(args, 'verbose', False):
+        for k in keys:
+            pos = keymap[k]
+            print(f"  {k:20s} -> row={pos[0]}, col={pos[1]}")
+    else:
+        for i in range(0, len(keys), 8):
+            print('  '.join(f'{k:15s}' for k in keys[i:i+8]))
+
+
+def _keyboard_calibrate():
+    ctrl = ITE8295()
+    ctrl.open()
+    try:
+        keymap = {}
+        print("=== Keyboard LED Calibration ===")
+        print("Each LED will light up RED one at a time.")
+        print("Type the key name (e.g., 'esc', 'a', 'f1') or press Enter to skip.")
+        print("Type 'q' to quit and save progress.\n")
+
+        ctrl.set_all_keys(0, 0, 0)
+        time.sleep(0.5)
+
+        for row in range(GRID_ROWS):
+            for col in range(GRID_COLS):
+                ctrl.set_key_color(row, col, 255, 0, 0)
+                try:
+                    answer = input(f"  LED ({row},{col:2d}): ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    answer = 'q'
+
+                ctrl.set_key_color(row, col, 0, 0, 0)
+
+                if answer == 'q':
+                    break
+                if answer:
+                    keymap[answer] = (row, col)
+                    print(f"    -> mapped '{answer}' to ({row}, {col})")
+            else:
+                continue
+            break
+
+        if keymap:
+            save_keymap(keymap)
+            print(f"\nSaved {len(keymap)} key mappings to {os.path.expanduser('~/.config/avellcc/keymap.json')}")
+        else:
+            print("\nNo keys mapped.")
+    finally:
+        ctrl.close()
+
+
+def _keyboard_firmware():
+    ctrl = ITE8295()
+    ctrl.open()
+    try:
+        data = ctrl.get_firmware_info()
+        print(f"Firmware report 0x5A: {' '.join(f'{b:02x}' for b in data)}")
     finally:
         ctrl.close()
 
@@ -412,82 +489,6 @@ def cmd_fan(args):
 
     # Default: show status
     print(status_report(fc))
-
-
-# ---------------------------------------------------------------------------
-# Subcommand: keys
-# ---------------------------------------------------------------------------
-
-def cmd_keys(args):
-    keymap = load_keymap()
-    keys = list_keys(keymap)
-    if args.verbose:
-        for k in keys:
-            pos = keymap[k]
-            print(f"  {k:20s} -> row={pos[0]}, col={pos[1]}")
-    else:
-        for i in range(0, len(keys), 8):
-            print('  '.join(f'{k:15s}' for k in keys[i:i+8]))
-
-
-# ---------------------------------------------------------------------------
-# Subcommand: calibrate
-# ---------------------------------------------------------------------------
-
-def cmd_calibrate(args):
-    """Interactive calibration: light up each LED and ask user which key it is."""
-    ctrl = ITE8295()
-    ctrl.open()
-    try:
-        keymap = {}
-        print("=== Keyboard LED Calibration ===")
-        print("Each LED will light up RED one at a time.")
-        print("Type the key name (e.g., 'esc', 'a', 'f1') or press Enter to skip.")
-        print("Type 'q' to quit and save progress.\n")
-
-        ctrl.set_all_keys(0, 0, 0)
-        time.sleep(0.5)
-
-        for row in range(GRID_ROWS):
-            for col in range(GRID_COLS):
-                ctrl.set_key_color(row, col, 255, 0, 0)
-                try:
-                    answer = input(f"  LED ({row},{col:2d}): ").strip().lower()
-                except (EOFError, KeyboardInterrupt):
-                    answer = 'q'
-
-                ctrl.set_key_color(row, col, 0, 0, 0)
-
-                if answer == 'q':
-                    break
-                if answer:
-                    keymap[answer] = (row, col)
-                    print(f"    -> mapped '{answer}' to ({row}, {col})")
-            else:
-                continue
-            break
-
-        if keymap:
-            save_keymap(keymap)
-            print(f"\nSaved {len(keymap)} key mappings to {os.path.expanduser('~/.config/avellcc/keymap.json')}")
-        else:
-            print("\nNo keys mapped.")
-    finally:
-        ctrl.close()
-
-
-# ---------------------------------------------------------------------------
-# Subcommand: firmware
-# ---------------------------------------------------------------------------
-
-def cmd_firmware(args):
-    ctrl = ITE8295()
-    ctrl.open()
-    try:
-        data = ctrl.get_firmware_info()
-        print(f"Firmware report 0x5A: {' '.join(f'{b:02x}' for b in data)}")
-    finally:
-        ctrl.close()
 
 
 # ---------------------------------------------------------------------------
@@ -637,8 +638,12 @@ def main():
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     sub = parser.add_subparsers(dest='subcommand')
 
-    # --- keyboard (was: led) ---
-    kb_p = sub.add_parser('keyboard', aliases=['kb'], help='Control keyboard RGB LEDs')
+    # --- keyboard ---
+    kb_p = sub.add_parser('keyboard', aliases=['kb'],
+                           help='Control keyboard RGB LEDs')
+    kb_p.add_argument('action', nargs='?', default=None,
+                       choices=['keys', 'calibrate', 'firmware'],
+                       help='keys: list key names | calibrate: map LEDs to keys | firmware: show firmware info')
     kb_p.add_argument('--color', '-c', help='Set color (hex, name, or R,G,B)')
     kb_p.add_argument('--key', '-k', help='Target a specific key')
     all_effects = sorted(set(EFFECT_NAMES) | set(SOFTWARE_EFFECTS))
@@ -648,6 +653,8 @@ def main():
     kb_p.add_argument('--off', action='store_true', help='Turn off keyboard LEDs')
     kb_p.add_argument('--restore', action='store_true', help='Restore saved state')
     kb_p.add_argument('--profile', '-p', help='Load a profile JSON file')
+    kb_p.add_argument('-v', '--verbose', action='store_true',
+                       help='Show grid positions (with keys action)')
     kb_p.set_defaults(func=cmd_keyboard)
 
     # --- lightbar ---
@@ -693,19 +700,6 @@ def main():
     fan_p.add_argument('--fan', type=int, choices=[1, 2], help='Target specific fan')
     fan_p.add_argument('--auto', action='store_true', help='Set fans to automatic mode')
     fan_p.set_defaults(func=cmd_fan)
-
-    # --- keys ---
-    keys_p = sub.add_parser('keys', help='List known key names')
-    keys_p.add_argument('-v', '--verbose', action='store_true', help='Show grid positions')
-    keys_p.set_defaults(func=cmd_keys)
-
-    # --- calibrate ---
-    cal_p = sub.add_parser('calibrate', help='Interactively calibrate key-to-LED mapping')
-    cal_p.set_defaults(func=cmd_calibrate)
-
-    # --- firmware ---
-    fw_p = sub.add_parser('firmware', help='Show keyboard firmware info')
-    fw_p.set_defaults(func=cmd_firmware)
 
     args = parser.parse_args()
     if not args.subcommand:

@@ -111,12 +111,13 @@ sudo dnf install dkms kernel-devel
 sudo modprobe acpi_call
 ```
 
-### Other
+### Keyboard utilities
 
 ```bash
-avellcc keys -v                           # List known keys with grid positions
-avellcc calibrate                         # Interactive key-to-LED calibration
-avellcc firmware                          # Show keyboard firmware info
+avellcc keyboard keys                     # List known key names
+avellcc keyboard keys -v                  # With grid positions
+avellcc keyboard calibrate                # Interactive key-to-LED calibration
+avellcc keyboard firmware                 # Show keyboard firmware info
 ```
 
 ## Profiles
