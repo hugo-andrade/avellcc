@@ -1,14 +1,14 @@
 # avellcc
 
-Linux control center for **Avell Storm 590X** (Clevo barebone) laptops. Per-key RGB keyboard LEDs, fan monitoring, and thermal status — no Windows required.
+Linux control center for **Avell Storm 590X** (Clevo barebone) laptops. Per-key RGB keyboard LEDs, rear lightbar, fan control, and thermal monitoring — no Windows required.
 
 ## Hardware
 
 | Component | Details |
 |---|---|
 | Keyboard LED Controller | ITE IT8295, USB `048d:8910` |
-| Secondary Device | ITE `048d:8911` (X58 lightbar support) |
-| Fans | 2x ACPI fans via hwmon |
+| Lightbar Controller | ITE `048d:8911` (X58 protocol) |
+| Fans | 2x ACPI fans via WMI/hwmon |
 | WMI | Clevo WMBB (`ABBC0F6D`) for fan control |
 
 ## Install
@@ -16,12 +16,8 @@ Linux control center for **Avell Storm 590X** (Clevo barebone) laptops. Per-key 
 System requirements:
 
 - Python 3.10+
-- `git`
-- `udev`
 - Linux `hidraw` support
-- Python package `hidapi` and, on distros without wheel support, the system `hidapi` library/devel package
-
-Packages by distro:
+- `acpi_call-dkms` for fan speed control (optional)
 
 ```bash
 # Arch Linux
@@ -35,47 +31,70 @@ sudo dnf install python3 python3-pip git hidapi hidapi-devel
 ```
 
 ```bash
-# Install
 git clone git@github.com:hugo-andrade/avellcc.git
 cd avellcc
 pip install -e .
 
-# udev rules (required for non-root access)
+# udev rules (required for non-root access to keyboard and lightbar)
 sudo cp udev/99-avell-keyboard.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 ## Usage
 
-### Keyboard LEDs
+### Keyboard
 
 ```bash
-avellcc led --color red                # All keys solid color
-avellcc led --color "#FF6600"          # Hex color
-avellcc led --color 255,100,0          # RGB values
+avellcc keyboard --color red              # All keys solid color
+avellcc keyboard --color "#FF6600"        # Hex color
+avellcc keyboard --color 255,100,0        # RGB values
 
-avellcc led --key w --color blue       # Single key
-avellcc led --key space --color green
+avellcc keyboard --key w --color blue     # Single key
+avellcc keyboard --key space --color green
 
-avellcc led --brightness 7             # Brightness (0-10)
-avellcc led --effect rainbow           # Hardware animation
-avellcc led --effect sw_rainbow        # Software rainbow wave
-avellcc led --effect sw_breathing      # Software breathing
+avellcc keyboard --brightness 7           # Brightness (0-10)
+avellcc keyboard --effect rainbow         # Hardware animation
+avellcc keyboard --effect sw_rainbow      # Software rainbow wave
+avellcc keyboard --effect sw_breathing    # Software breathing
 
-avellcc led --profile gaming.json      # Load profile
-avellcc led --off                      # Turn off
-avellcc led --restore                  # Restore saved state
+avellcc keyboard --profile gaming.json    # Load profile
+avellcc keyboard --off                    # Turn off
+avellcc keyboard --restore                # Restore saved state
+
+avellcc kb -c red -b 7                    # Short alias
 ```
 
-### Fan monitoring
+### Lightbar
 
 ```bash
-avellcc fan --status                   # RPM + temperatures
+avellcc lightbar                          # Show status and available effects/colors
+avellcc lightbar --effect static --color blue --brightness 4
+avellcc lightbar --effect breathe --color purple
+avellcc lightbar --effect wave --speed 5
+avellcc lightbar --effect color-wave
+avellcc lightbar --effect change-color
+avellcc lightbar --effect granular --color cyan
+avellcc lightbar --off
+avellcc lightbar --restore
+
+avellcc lb -e wave -c blue -b 4 -s 3     # Short alias
 ```
 
-Fan speed control requires a writable backend. Today the practical path is
-`acpi_call`; `tuxedo_io` readout exists but write support is not implemented in
-this project yet.
+Available effects: `static`, `breathe`, `wave`, `change-color`, `granular`, `color-wave`
+
+Available colors: `red`, `yellow`, `lime`, `green`, `cyan`, `blue`, `purple`
+
+### Fans
+
+```bash
+avellcc fan                               # Show RPM + temperatures
+avellcc fan --status                      # Same as above
+avellcc fan --speed 80                    # All fans 80%
+avellcc fan --speed 100 --fan 1           # Fan 1 at 100%
+avellcc fan --auto                        # Back to automatic
+```
+
+Fan speed control requires the `acpi_call` kernel module:
 
 ```bash
 # Arch Linux
@@ -88,57 +107,16 @@ sudo apt install dkms acpi-call-dkms linux-headers-$(uname -r)
 sudo dnf install dkms kernel-devel
 ```
 
-Then load the module:
-
 ```bash
 sudo modprobe acpi_call
 ```
 
-After that:
-
-```bash
-avellcc fan --speed 80                 # All fans 80%
-avellcc fan --speed 100 --fan 1        # Fan 1 at 100%
-avellcc fan --auto                     # Back to automatic
-```
-
-### Lightbar
-
-```bash
-avellcc lightbar --x58-off
-avellcc lightbar --restore
-avellcc lightbar --x58-effect static --x58-color blue --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect breathe --x58-color purple --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect wave --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect color-wave --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect change-color --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect granular --x58-color purple --x58-brightness 4 --x58-speed 3
-
-# Raw / reverse-engineering access
-avellcc lightbar --descriptor
-avellcc lightbar --get 0x5A
-avellcc lightbar --get 0xCD --feature-size 64
-avellcc lightbar --raw "bf 05"
-avellcc lightbar --command 0xe2 --data "05" --feature-size 64
-
-# Legacy X170 probing
-avellcc lightbar --x170-off
-avellcc lightbar --x170-brightness 5
-avellcc lightbar --x170-color-cmd 0xb0 --speed 3 --color blue
-```
-
-The practical path for the Storm 590X is `LightBar_X58` on `048d:8911`. It
-uses `cmd 0xE2` inside a 64-byte HID feature frame and is now integrated as a
-normal project feature. `avellcc led --restore` restores both keyboard and
-lightbar state. The legacy X170 helpers remain only for comparison with older
-models. Details are in [`docs/lightbar-re.md`](docs/lightbar-re.md).
-
 ### Other
 
 ```bash
-avellcc keys -v                        # List known keys with grid positions
-avellcc calibrate                      # Interactive key-to-LED calibration
-avellcc firmware                       # Show firmware info
+avellcc keys -v                           # List known keys with grid positions
+avellcc calibrate                         # Interactive key-to-LED calibration
+avellcc firmware                          # Show keyboard firmware info
 ```
 
 ## Profiles
@@ -168,28 +146,19 @@ JSON files in `~/.config/avellcc/profiles/`:
 
 ## Restore on boot
 
-If `avellcc` is not installed in a system path, first check where the CLI was
-installed:
-
-```bash
-command -v avellcc
-```
-
-Then copy the service and, if needed, adjust `ExecStart=` to the path returned
-above.
-
 ```bash
 sudo cp systemd/avellcc-restore.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable avellcc-restore.service
 ```
 
-The restore service uses `avellcc led --restore`, which now restores both the
-keyboard and the saved X58 lightbar state.
+The restore service runs `avellcc keyboard --restore`, which restores both keyboard and lightbar saved state.
 
 ## Protocol
 
-Communication with the ITE IT8295 is via HID feature reports on report ID `0xCC` (6 bytes), sent through the Linux hidraw interface.
+### Keyboard (ITE IT8295)
+
+HID feature reports on report ID `0xCC` (6 bytes) via Linux hidraw.
 
 | Command | Format | Description |
 |---|---|---|
@@ -199,17 +168,24 @@ Communication with the ITE IT8295 is via HID feature reports on report ID `0xCC`
 
 LED addressing: `led_id = (row << 5) | col` on a 6x20 grid.
 
-Key positions confirmed via [tuxedo-drivers](https://github.com/tuxedocomputers/tuxedo-drivers) (`ite_829x.c`).
+### Lightbar (ITE 8911)
+
+HID feature reports on report ID `0xCD`, command `0xE2`, 64-byte frames via hidraw. Protocol reverse-engineered from the Windows `CC.Device.LightBar_X58` driver. Details in [`docs/lightbar-re.md`](docs/lightbar-re.md).
+
+### Fans (Clevo WMI)
+
+ACPI method `\_SB.WMI.WMBB` (GUID `ABBC0F6D`, 3 args: instance, command, data).
+
+| Command | Function |
+|---|---|
+| `0x63` | Get fan 1 duty + period |
+| `0x64` | Get fan 2 duty + period |
+| `0x68` | Set fan duty (packed: fan1[7:0] \| fan2[15:8]) |
+| `0x69` | Set auto mode (bitmask: bit0=fan1, bit1=fan2) |
 
 ## Compatibility
 
-Built and tested on Arch Linux. Should work on any distro with:
-- Python >= 3.10
-- hidraw kernel support (standard)
-- USB HID devices `048d:8910` and `048d:8911`
-- `udev` rules installed for non-root LED/lightbar access
-
-Other Clevo-based laptops with the same ITE IT8295 controller (TUXEDO, Sager, etc.) should also work.
+Built and tested on Arch Linux. Should work on any distro with Python >= 3.10 and hidraw support. Other Clevo-based laptops with ITE IT8295 (TUXEDO, Sager, etc.) should also work.
 
 ## License
 
