@@ -2,13 +2,17 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 
 	"github.com/hugo-andrade/avellcc/internal/config"
 	"github.com/hugo-andrade/avellcc/internal/lightbar"
+	"github.com/hugo-andrade/avellcc/internal/tui"
 )
 
 var (
@@ -292,9 +296,15 @@ func runLightbar(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Default: show status
-	lightbarStatus(ctrl)
-	return nil
+	// Default: interactive TUI panel (or plain text if not a terminal)
+	if _, err := unix.IoctlGetTermios(int(os.Stdout.Fd()), unix.TCGETS); err != nil {
+		lightbarStatus(ctrl)
+		return nil
+	}
+	panel := tui.NewLightbarPanel(ctrl)
+	p := tea.NewProgram(panel)
+	_, err := p.Run()
+	return err
 }
 
 func validateLightbarArgs() error {

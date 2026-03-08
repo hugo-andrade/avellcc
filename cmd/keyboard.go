@@ -8,11 +8,14 @@ import (
 	"syscall"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 
 	"github.com/hugo-andrade/avellcc/internal/config"
 	"github.com/hugo-andrade/avellcc/internal/keyboard"
 	"github.com/hugo-andrade/avellcc/internal/lightbar"
+	"github.com/hugo-andrade/avellcc/internal/tui"
 )
 
 const (
@@ -114,6 +117,18 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer func() { _ = ctrl.Close() }()
+
+	// No flags → interactive TUI panel
+	hasFlags := kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbOff || kbRestore || kbProfile != ""
+	if !hasFlags {
+		if _, err := unix.IoctlGetTermios(int(os.Stdout.Fd()), unix.TCGETS); err != nil {
+			return fmt.Errorf("interactive TUI requires a terminal; use flags for non-interactive mode")
+		}
+		panel := tui.NewKeyboardPanel(ctrl)
+		p := tea.NewProgram(panel)
+		_, err := p.Run()
+		return err
+	}
 
 	bundle := config.LoadStateBundle()
 	state := map[string]any{}
@@ -284,9 +299,7 @@ func validateKeyboardArgs(action string) error {
 	if kbProfile != "" && (kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbOff || kbRestore) {
 		return fmt.Errorf("--profile can only be combined with --brightness")
 	}
-	if !hasFlags {
-		return fmt.Errorf("choose a keyboard action or LED update")
-	}
+	// No flags = launch interactive TUI (handled in runKeyboard)
 	return nil
 }
 

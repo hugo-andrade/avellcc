@@ -57,7 +57,7 @@ func (m FanModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case KeyQuit, KeyCtrlC, KeyEsc:
 			return m, tea.Quit
 		case "+", "=":
 			if err := m.fc.SetFanSpeed(0, 100); err != nil {
@@ -116,80 +116,73 @@ func (m FanModel) View() tea.View {
 
 	var sb strings.Builder
 
-	sb.WriteString(TitleStyle.Render("  Avell Fan Monitor"))
-	sb.WriteString("\n\n")
+	RenderHeader(&sb, "fan", string(m.fc.Backend()), m.width)
 
-	// Fan section
+	// Fan sections
 	for i := 1; i <= 2; i++ {
 		fanKey := fmt.Sprintf("fan%d", i)
 		rpm, hasRPM := m.fans[fanKey+"_rpm"]
 		dutyPct, hasDuty := m.fans[fanKey+"_duty_pct"]
 
-		header := lipgloss.NewStyle().Bold(true).Foreground(ColorSecondary).Render(fmt.Sprintf("Fan %d", i))
-		sb.WriteString(header)
+		RenderSection(&sb, fmt.Sprintf("Fan %d", i), true, m.width, func(sb *strings.Builder) {
+			if hasRPM {
+				fmt.Fprintf(sb, "%d RPM", rpm)
+			} else {
+				sb.WriteString("? RPM")
+			}
 
-		if hasRPM {
-			fmt.Fprintf(&sb, "  %d RPM", rpm)
-		} else {
-			sb.WriteString("  ? RPM")
-		}
+			if hasDuty {
+				clr := DutyColor(dutyPct)
+				bar := renderProgressBar(int(m.dutyPos[i-1]), 30, clr)
+				fmt.Fprintf(sb, "  %s %d%%", bar, dutyPct)
+			}
 
-		if hasDuty {
-			clr := DutyColor(dutyPct)
-			bar := renderProgressBar(int(m.dutyPos[i-1]), 30, clr)
-			fmt.Fprintf(&sb, "  %s %d%%", bar, dutyPct)
-		}
-		sb.WriteString("\n")
+			// Sparkline
+			if len(m.history[i-1]) > 1 {
+				sb.WriteString("\n    ")
+				sb.WriteString(renderSparkline(m.history[i-1]))
+			}
+		})
 
-		// Sparkline
-		if len(m.history[i-1]) > 1 {
-			sb.WriteString("  ")
-			sb.WriteString(renderSparkline(m.history[i-1]))
-			sb.WriteString("\n")
-		}
 		sb.WriteString("\n")
 	}
 
 	// Temperature section
 	if len(m.temps) > 0 {
-		sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Temperatures"))
-		sb.WriteString("\n")
-
-		var coreTemps []float64
-		for _, t := range m.temps {
-			if strings.HasPrefix(t.Name, "Core ") {
-				coreTemps = append(coreTemps, t.Value)
-				continue
-			}
-			clr := TempColor(t.Value)
-			name := LabelStyle.Render(t.Name)
-			val := lipgloss.NewStyle().Foreground(clr).Render(fmt.Sprintf("%.1f°C", t.Value))
-			fmt.Fprintf(&sb, "  %s %s\n", name, val)
-		}
-		if len(coreTemps) > 0 {
-			min, max := coreTemps[0], coreTemps[0]
-			for _, v := range coreTemps[1:] {
-				if v < min {
-					min = v
+		RenderSection(&sb, "Temperatures", true, m.width, func(sb *strings.Builder) {
+			var lines []string
+			var coreTemps []float64
+			for _, t := range m.temps {
+				if strings.HasPrefix(t.Name, "Core ") {
+					coreTemps = append(coreTemps, t.Value)
+					continue
 				}
-				if v > max {
-					max = v
-				}
+				clr := TempColor(t.Value)
+				name := LabelStyle.Render(t.Name)
+				val := lipgloss.NewStyle().Foreground(clr).Render(fmt.Sprintf("%.1f°C", t.Value))
+				lines = append(lines, fmt.Sprintf("%s %s", name, val))
 			}
-			clr := TempColor(max)
-			label := LabelStyle.Render(fmt.Sprintf("CPU Cores (%d)", len(coreTemps)))
-			val := lipgloss.NewStyle().Foreground(clr).Render(fmt.Sprintf("%.0f-%.0f°C", min, max))
-			fmt.Fprintf(&sb, "  %s %s\n", label, val)
-		}
+			if len(coreTemps) > 0 {
+				minT, maxT := coreTemps[0], coreTemps[0]
+				for _, v := range coreTemps[1:] {
+					if v < minT {
+						minT = v
+					}
+					if v > maxT {
+						maxT = v
+					}
+				}
+				clr := TempColor(maxT)
+				label := LabelStyle.Render(fmt.Sprintf("CPU Cores (%d)", len(coreTemps)))
+				val := lipgloss.NewStyle().Foreground(clr).Render(fmt.Sprintf("%.0f-%.0f°C", minT, maxT))
+				lines = append(lines, fmt.Sprintf("%s %s", label, val))
+			}
+			sb.WriteString(strings.Join(lines, "\n    "))
+		})
 	}
 
-	if m.err != nil {
-		sb.WriteString("\n")
-		sb.WriteString(ErrorStyle.Render(fmt.Sprintf("Error: %v", m.err)))
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString(HelpStyle.Render("  q quit • + max • - min • a auto"))
+	RenderFeedback(&sb, m.err, "")
+	sb.WriteString(RenderHelp("+ max", "- min", "a auto", "q quit"))
 	sb.WriteString("\n")
 
 	v := tea.NewView(sb.String())

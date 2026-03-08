@@ -41,7 +41,7 @@ func (m KeyboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case KeyQuit, KeyCtrlC, KeyEsc:
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
