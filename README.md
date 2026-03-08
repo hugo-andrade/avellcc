@@ -1,5 +1,12 @@
 # avellcc
 
+<p>
+    <a href="https://goreportcard.com/report/github.com/hugo-andrade/avellcc"><img src="https://goreportcard.com/badge/github.com/hugo-andrade/avellcc" alt="Go Report Badge"></a>
+    <a href="https://github.com/hugo-andrade/avellcc/actions/workflows/ci.yml"><img src="https://github.com/hugo-andrade/avellcc/actions/workflows/ci.yml/badge.svg" alt="CI Badge"></a>
+    <a href="https://github.com/hugo-andrade/avellcc/blob/main/LICENSE"><img src="https://img.shields.io/github/license/hugo-andrade/avellcc.svg" alt="License Badge"></a>
+    <a href="https://github.com/hugo-andrade/avellcc/releases"><img src="https://img.shields.io/github/v/release/hugo-andrade/avellcc" alt="Release Badge"></a>
+</p>
+
 Linux control center for **Avell Storm 590X** (Clevo barebone) laptops. Per-key RGB keyboard LEDs, rear lightbar, fan control, and thermal monitoring — no Windows required.
 
 Single static binary, zero dependencies.
@@ -15,21 +22,70 @@ Single static binary, zero dependencies.
 
 ## Install
 
-Requirements:
-
-- Linux with `hidraw` support
-- Go 1.22+ (build only)
-- `acpi_call-dkms` for fan speed control (optional)
+### Quick install (recommended)
 
 ```bash
-git clone git@github.com:hugo-andrade/avellcc.git
+curl -fsSL https://raw.githubusercontent.com/hugo-andrade/avellcc/main/install.sh | bash
+```
+
+This downloads the latest release, verifies the checksum, installs the binary to `/usr/local/bin`, sets up udev rules, and installs the systemd restore service.
+
+You can customize the install:
+
+```bash
+# Install a specific version
+VERSION=0.2.0 curl -fsSL https://raw.githubusercontent.com/hugo-andrade/avellcc/main/install.sh | bash
+
+# Install to a custom directory
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/hugo-andrade/avellcc/main/install.sh | bash
+```
+
+### Go install
+
+```bash
+go install github.com/hugo-andrade/avellcc@latest
+```
+
+> **Note:** `go install` only installs the binary. You still need to set up udev rules manually for non-root access (see [udev rules](#udev-rules) below).
+
+### Build from source
+
+```bash
+git clone https://github.com/hugo-andrade/avellcc.git
 cd avellcc
+make install
+```
+
+Or manually:
+
+```bash
 go build -o avellcc .
 sudo install -m 755 avellcc /usr/local/bin/
+```
 
-# udev rules (required for non-root access to keyboard and lightbar)
+### udev rules
+
+Required for non-root access to the keyboard and lightbar HID devices:
+
+```bash
 sudo cp udev/99-avell-keyboard.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+### Fan speed control (optional)
+
+Fan speed control requires the `acpi_call` kernel module:
+
+```bash
+# Arch Linux
+sudo pacman -S --needed linux-headers acpi_call-dkms
+
+# Debian / Ubuntu
+sudo apt install dkms acpi-call-dkms linux-headers-$(uname -r)
+```
+
+```bash
+sudo modprobe acpi_call
 ```
 
 ## Usage
@@ -87,20 +143,6 @@ avellcc fan --auto                        # Back to automatic
 
 The TUI dashboard shows live RPM sparklines, duty progress bars, and temperatures. Keyboard shortcuts: `+` max, `-` min, `a` auto, `q` quit.
 
-Fan speed control requires the `acpi_call` kernel module:
-
-```bash
-# Arch Linux
-sudo pacman -S --needed linux-headers acpi_call-dkms
-
-# Debian / Ubuntu
-sudo apt install dkms acpi-call-dkms linux-headers-$(uname -r)
-```
-
-```bash
-sudo modprobe acpi_call
-```
-
 ### Keyboard utilities
 
 ```bash
@@ -144,6 +186,25 @@ sudo systemctl enable avellcc-restore.service
 ```
 
 The restore service runs `avellcc keyboard --restore`, which restores both keyboard and lightbar saved state.
+
+> **Tip:** The quick install script sets this up automatically.
+
+## Uninstall
+
+```bash
+make uninstall
+```
+
+Or manually:
+
+```bash
+sudo systemctl disable --now avellcc-restore.service
+sudo rm -f /usr/local/bin/avellcc
+sudo rm -f /etc/udev/rules.d/99-avell-keyboard.rules
+sudo rm -f /etc/systemd/system/avellcc-restore.service
+sudo udevadm control --reload-rules
+sudo systemctl daemon-reload
+```
 
 ## Protocol
 
