@@ -109,30 +109,27 @@ they are no longer the primary hypothesis for the Storm 590X.
 `avellcc lightbar` now gives three useful layers:
 
 - raw access to `0x5A`/`0xCD`
-- Windows-sized probing through `--feature-size 64`
+- Windows-sized probing through `--debug-feature-size 64`
 - grounded `LightBar_X58` helpers for the real `8911`
 
 Useful commands:
 
 ```bash
 avellcc lightbar
-avellcc lightbar --descriptor
-avellcc lightbar --get 0x5A
-avellcc lightbar --get 0xCD --feature-size 64
-avellcc lightbar --raw "bf 05"
-avellcc lightbar --raw "e2 05" --report 0xCD --feature-size 64
-avellcc lightbar --command 0xbf --data "05"
-avellcc lightbar --command 0xe2 --data "05" --feature-size 64
-avellcc lightbar --x58-off
+avellcc lightbar --debug-descriptor
+avellcc lightbar --debug-get 0x5A
+avellcc lightbar --debug-get 0xCD --debug-feature-size 64
+avellcc lightbar --debug-raw "bf 05"
+avellcc lightbar --debug-raw "e2 05" --debug-report 0xCD --debug-feature-size 64
+avellcc lightbar --debug-command 0xbf --debug-data "05"
+avellcc lightbar --debug-command 0xe2 --debug-data "05" --debug-feature-size 64
+avellcc lightbar --off
 avellcc lightbar --restore
-avellcc lightbar --x58-effect static --x58-color blue --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect wave --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect color-wave --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect change-color --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x58-effect granular --x58-color purple --x58-brightness 4 --x58-speed 3
-avellcc lightbar --x170-off
-avellcc lightbar --x170-brightness 5
-avellcc lightbar --x170-color-cmd 0xb0 --speed 3 --color blue
+avellcc lightbar --effect static --color blue --brightness 4 --speed 3
+avellcc lightbar --effect wave --brightness 4 --speed 3
+avellcc lightbar --effect color-wave --brightness 4 --speed 3
+avellcc lightbar --effect change-color --brightness 4 --speed 3
+avellcc lightbar --effect granular --color purple --brightness 4 --speed 3
 ```
 
 ## Current conclusion
@@ -149,9 +146,9 @@ The remaining unknown is the semantic map of every `effect_code` and
 
 Confirmed hardware results on the Storm 590X:
 
-- `--x58-off` turns the physical rear lightbar off
-- `--x58-effect static --x58-color blue --x58-brightness 4 --x58-speed 3` produces a static blue bar
-- `--x58-effect wave` and `--x58-effect color-wave` both still behave as RGB automatic modes on this machine
+- `--off` turns the physical rear lightbar off
+- `--effect static --color blue --brightness 4 --speed 3` produces a static blue bar
+- `--effect wave` and `--effect color-wave` both still behave as RGB automatic modes on this machine
 
-The repo now also persists grounded X58 state. `avellcc led --restore` restores
+The repo now also persists grounded X58 state. `avellcc keyboard --restore` restores
 both keyboard and lightbar state, and profiles can carry a `lightbar` section.

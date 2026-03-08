@@ -69,7 +69,7 @@ avellcc kb -c red -b 7                    # Short alias
 ```bash
 avellcc lightbar                          # Show status and available effects/colors
 avellcc lightbar --effect static --color blue --brightness 4
-avellcc lightbar --effect breathe --color purple
+avellcc lightbar --effect static --color purple --brightness 4
 avellcc lightbar --effect wave --speed 5
 avellcc lightbar --effect color-wave
 avellcc lightbar --effect change-color
@@ -77,12 +77,15 @@ avellcc lightbar --effect granular --color cyan
 avellcc lightbar --off
 avellcc lightbar --restore
 
-avellcc lb -e wave -c blue -b 4 -s 3     # Short alias
+avellcc lb -e static -c blue -b 4 -s 3   # Short alias
 ```
 
 Available effects: `static`, `breathe`, `wave`, `change-color`, `granular`, `color-wave`
 
 Available colors: `red`, `yellow`, `lime`, `green`, `cyan`, `blue`, `purple`
+
+On the Storm 590X, `wave` and `color-wave` are currently confirmed as RGB
+automatic modes. `static` is the grounded single-color mode.
 
 ### Fans
 

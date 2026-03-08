@@ -126,6 +126,122 @@ def format_hex(data: bytes | bytearray | list[int]) -> str:
     return ' '.join(f'{int(b) & 0xFF:02x}' for b in data)
 
 
+def _collect_keyboard_control_flags(args) -> dict[str, bool]:
+    return {
+        'color': args.color is not None,
+        'key': args.key is not None,
+        'effect': args.effect is not None,
+        'speed': args.speed is not None,
+        'brightness': args.brightness is not None,
+        'off': bool(args.off),
+        'restore': bool(args.restore),
+        'profile': args.profile is not None,
+    }
+
+
+def validate_keyboard_args(args):
+    action = getattr(args, 'action', None)
+    flags = _collect_keyboard_control_flags(args)
+
+    if action is not None:
+        if action != 'keys' and args.verbose:
+            raise ValueError("--verbose is only valid with 'keyboard keys'.")
+        invalid = [name for name, present in flags.items() if present]
+        if invalid:
+            joined = ', '.join(f'--{name}' for name in invalid)
+            raise ValueError(f"'keyboard {action}' does not accept LED control flags ({joined}).")
+        return
+
+    if args.verbose:
+        raise ValueError("--verbose is only valid with 'keyboard keys'.")
+
+    if args.key and args.color is None:
+        raise ValueError("--key requires --color.")
+    if args.speed is not None and args.effect is None:
+        raise ValueError("--speed requires --effect.")
+    if args.effect is not None and args.color is not None:
+        raise ValueError("Choose either --effect or --color.")
+
+    if args.off and any([
+        args.restore,
+        args.color is not None,
+        args.key is not None,
+        args.effect is not None,
+        args.speed is not None,
+        args.brightness is not None,
+        args.profile is not None,
+    ]):
+        raise ValueError("--off cannot be combined with other keyboard options.")
+
+    if args.restore and any([
+        args.off,
+        args.color is not None,
+        args.key is not None,
+        args.effect is not None,
+        args.speed is not None,
+        args.brightness is not None,
+        args.profile is not None,
+    ]):
+        raise ValueError("--restore cannot be combined with other keyboard options.")
+
+    if args.profile and any([
+        args.color is not None,
+        args.key is not None,
+        args.effect is not None,
+        args.speed is not None,
+        args.off,
+        args.restore,
+    ]):
+        raise ValueError("--profile can only be combined with --brightness.")
+
+    if not any(flags.values()):
+        raise ValueError("Choose a keyboard action or LED update.")
+
+
+def _collect_lightbar_debug_flags(args) -> dict[str, bool]:
+    return {
+        'debug-descriptor': bool(getattr(args, 'debug_descriptor', False)),
+        'debug-get': getattr(args, 'debug_get', None) is not None,
+        'debug-raw': getattr(args, 'debug_raw', None) is not None,
+        'debug-command': getattr(args, 'debug_command', None) is not None,
+    }
+
+
+def validate_lightbar_args(args):
+    if getattr(args, 'effect', None) is not None and getattr(args, 'effect_code', None) is not None:
+        raise ValueError("Choose either --effect or --effect-code.")
+    if getattr(args, 'color', None) is not None and getattr(args, 'color_id', None) is not None:
+        raise ValueError("Choose either --color or --color-id.")
+
+    if getattr(args, 'debug_data', None) is not None and getattr(args, 'debug_command', None) is None:
+        raise ValueError("--debug-data requires --debug-command.")
+
+    debug_flags = _collect_lightbar_debug_flags(args)
+    debug_actions = [name for name, present in debug_flags.items() if present]
+    if len(debug_actions) > 1:
+        joined = ', '.join(f'--{name}' for name in debug_actions)
+        raise ValueError(f"Choose only one lightbar debug action at a time ({joined}).")
+
+    has_update = any(
+        value is not None
+        for value in [
+            getattr(args, 'effect', None),
+            getattr(args, 'effect_code', None),
+            getattr(args, 'color', None),
+            getattr(args, 'color_id', None),
+            getattr(args, 'brightness', None),
+            getattr(args, 'speed', None),
+        ]
+    )
+
+    if args.off and (args.restore or has_update or debug_actions):
+        raise ValueError("--off cannot be combined with other lightbar options.")
+    if args.restore and (args.off or has_update or debug_actions):
+        raise ValueError("--restore cannot be combined with other lightbar options.")
+    if has_update and debug_actions:
+        raise ValueError("Semantic lightbar options cannot be combined with --debug-* actions.")
+
+
 # ---------------------------------------------------------------------------
 # State persistence
 # ---------------------------------------------------------------------------
@@ -223,6 +339,7 @@ def restore_lightbar_state(lightbar_state: dict | None, ctrl: ITE8911 | None = N
 # ---------------------------------------------------------------------------
 
 def cmd_keyboard(args):
+    validate_keyboard_args(args)
     action = getattr(args, 'action', None)
 
     # --- Sub-actions ---
@@ -259,7 +376,9 @@ def cmd_keyboard(args):
             print("State restored.")
             return
 
-        if args.brightness is not None:
+        apply_brightness_after_profile = args.brightness is not None and args.profile is not None
+
+        if args.brightness is not None and not apply_brightness_after_profile:
             ctrl.set_brightness(args.brightness)
             state['brightness'] = args.brightness
             print(f"Brightness set to {args.brightness}.")
@@ -306,6 +425,11 @@ def cmd_keyboard(args):
             if profile_lightbar_state is not None:
                 bundle['lightbar'] = profile_lightbar_state
             print(f"Profile '{args.profile}' loaded.")
+
+        if apply_brightness_after_profile:
+            ctrl.set_brightness(args.brightness)
+            state['brightness'] = args.brightness
+            print(f"Brightness set to {args.brightness}.")
 
         if state:
             bundle['keyboard'] = state
@@ -500,6 +624,8 @@ LIGHTBAR_COLORS = sorted(X58_COLOR_IDS.keys())
 
 
 def cmd_lightbar(args):
+    validate_lightbar_args(args)
+
     # --- Resolve effect ---
     effect_code = None
     if getattr(args, 'effect', None) is not None:
@@ -551,22 +677,19 @@ def cmd_lightbar(args):
                 speed=speed,
             )
             ctrl.x58_apply(
-                effect_code=effect_code,
-                color_id=color_id,
-                brightness=brightness,
-                speed=speed,
+                effect_code=saved_state.get('effect_code'),
+                color_id=saved_state.get('color_id'),
+                brightness=saved_state.get('brightness'),
+                speed=saved_state.get('speed'),
             )
             save_lightbar_state(saved_state)
 
-            parts = []
-            if effect_code is not None:
-                parts.append(f"effect={X58_EFFECT_NAMES.get(effect_code, hex(effect_code))}")
-            if color_id is not None:
-                parts.append(f"color={X58_COLOR_NAMES.get(color_id, color_id)}")
-            if brightness is not None:
-                parts.append(f"brightness={brightness}")
-            if speed is not None:
-                parts.append(f"speed={speed}")
+            parts = [
+                f"effect={saved_state.get('effect', '?')}",
+                f"color={X58_COLOR_NAMES.get(saved_state.get('color_id'), saved_state.get('color_id'))}",
+                f"brightness={saved_state.get('brightness')}",
+                f"speed={saved_state.get('speed')}",
+            ]
             print("Lightbar updated: " + ", ".join(parts) + ".")
             return
 
