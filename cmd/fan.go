@@ -13,12 +13,12 @@ import (
 )
 
 var (
-	fanStatus  bool
-	fanSpeed   int
+	fanStatus   bool
+	fanSpeed    int
 	fanSpeedSet bool
-	fanID      int
-	fanIDSet   bool
-	fanAuto    bool
+	fanID       int
+	fanIDSet    bool
+	fanAuto     bool
 )
 
 var fanCmd = &cobra.Command{

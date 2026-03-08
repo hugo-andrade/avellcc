@@ -221,9 +221,10 @@ func (fc *FanController) acpiSetFan(fanID, duty int) error {
 		if duty2 == 0 {
 			duty2 = duty
 		}
-		if fanID == 1 {
+		switch fanID {
+		case 1:
 			duty1 = duty
-		} else if fanID == 2 {
+		case 2:
 			duty2 = duty
 		}
 		arg = (duty1 & 0xFF) | ((duty2 & 0xFF) << 8)

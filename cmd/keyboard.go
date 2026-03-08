@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,6 +13,12 @@ import (
 	"github.com/hugo-andrade/avellcc/internal/config"
 	"github.com/hugo-andrade/avellcc/internal/keyboard"
 	"github.com/hugo-andrade/avellcc/internal/lightbar"
+)
+
+const (
+	actionKeys   = "keys"
+	actionOff    = "off"
+	actionEffect = "effect"
 )
 
 var (
@@ -31,13 +36,13 @@ var (
 )
 
 var keyboardCmd = &cobra.Command{
-	Use:               "keyboard [keys|calibrate|firmware]",
-	Aliases:           []string{"kb"},
-	Short:             "Control keyboard RGB LEDs",
-	Args:              cobra.MaximumNArgs(1),
-	RunE:              runKeyboard,
-	SilenceUsage:      true,
-	SilenceErrors:     true,
+	Use:           "keyboard [keys|calibrate|firmware]",
+	Aliases:       []string{"kb"},
+	Short:         "Control keyboard RGB LEDs",
+	Args:          cobra.MaximumNArgs(1),
+	RunE:          runKeyboard,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func init() {
@@ -81,7 +86,7 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		action = args[0]
 		switch action {
-		case "keys", "calibrate", "firmware":
+		case actionKeys, "calibrate", "firmware":
 			// valid
 		default:
 			return fmt.Errorf("unknown action: %s (valid: keys, calibrate, firmware)", action)
@@ -95,7 +100,7 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 
 	// Sub-actions
 	switch action {
-	case "keys":
+	case actionKeys:
 		return kbKeys()
 	case "calibrate":
 		return kbCalibrate()
@@ -108,7 +113,7 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 	if err := ctrl.Open(); err != nil {
 		return err
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 
 	bundle := config.LoadStateBundle()
 	state := map[string]any{}
@@ -117,9 +122,9 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 		if err := ctrl.Off(); err != nil {
 			return err
 		}
-		state["mode"] = "off"
+		state["mode"] = actionOff
 		bundle["keyboard"] = state
-		config.SaveStateBundle(bundle)
+		_ = config.SaveStateBundle(bundle)
 		fmt.Println("Keyboard LEDs off.")
 		return nil
 	}
@@ -146,41 +151,38 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Brightness set to %d.\n", kbBrightness)
 	}
 
-	if kbEffect != "" {
+	switch {
+	case kbEffect != "":
 		speed := kbSpeed
-		// Check if it's a hardware effect
 		if animID, ok := keyboard.EffectNames[strings.ToLower(kbEffect)]; ok {
 			if err := ctrl.SetHWAnimation(animID); err != nil {
 				return err
 			}
-			state["mode"] = "effect"
-			state["effect"] = kbEffect
+			state["mode"] = actionEffect
+			state[actionEffect] = kbEffect
 			state["speed"] = float64(speed)
 			fmt.Printf("Hardware effect '%s' activated.\n", kbEffect)
 		} else {
-			// Software effect
 			swName := strings.ToLower(kbEffect)
 			if !strings.HasPrefix(swName, "sw_") {
 				swName = "sw_" + swName
 			}
 			fn, ok := keyboard.SoftwareEffects[swName]
 			if !ok {
-				// Try without sw_ prefix
 				fn, ok = keyboard.SoftwareEffects[strings.ToLower(kbEffect)]
 				if !ok {
 					return fmt.Errorf("unknown effect '%s'; available: %s", kbEffect, strings.Join(allEffectNames(), ", "))
 				}
-				swName = strings.ToLower(kbEffect)
 			}
 			runner := keyboard.NewEffectRunner(ctrl, 30)
 			opts := keyboard.DefaultEffectOpts()
 			opts.Speed = speed
 			runner.Start(fn, opts)
-			state["mode"] = "effect"
-			state["effect"] = kbEffect
+			state["mode"] = actionEffect
+			state[actionEffect] = kbEffect
 			state["speed"] = float64(speed)
 			bundle["keyboard"] = state
-			config.SaveStateBundle(bundle)
+			_ = config.SaveStateBundle(bundle)
 			fmt.Printf("Software effect '%s' running (speed=%d). Press Ctrl+C to stop.\n", kbEffect, speed)
 			sig := make(chan os.Signal, 1)
 			signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -189,7 +191,7 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 			fmt.Println("\nEffect stopped.")
 			return nil
 		}
-	} else if kbColor != "" {
+	case kbColor != "":
 		r, g, b, err := config.ParseColor(kbColor)
 		if err != nil {
 			return err
@@ -219,7 +221,7 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 			state["color"] = []any{float64(r), float64(g), float64(b)}
 			fmt.Printf("All keys set to (%d, %d, %d).\n", r, g, b)
 		}
-	} else if kbProfile != "" {
+	case kbProfile != "":
 		lbState, err := loadProfile(ctrl, kbProfile)
 		if err != nil {
 			return err
@@ -242,7 +244,7 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 
 	if len(state) > 0 {
 		bundle["keyboard"] = state
-		config.SaveStateBundle(bundle)
+		_ = config.SaveStateBundle(bundle)
 	}
 
 	return nil
@@ -252,7 +254,7 @@ func validateKeyboardArgs(action string) error {
 	hasFlags := kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbOff || kbRestore || kbProfile != ""
 
 	if action != "" {
-		if action != "keys" && kbVerbose {
+		if action != actionKeys && kbVerbose {
 			return fmt.Errorf("--verbose is only valid with 'keyboard keys'")
 		}
 		if hasFlags {
@@ -317,7 +319,7 @@ func kbCalibrate() error {
 	if err := ctrl.Open(); err != nil {
 		return err
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 
 	keymap := map[string][2]int{}
 	fmt.Println("=== Keyboard LED Calibration ===")
@@ -326,13 +328,13 @@ func kbCalibrate() error {
 	fmt.Println("Type 'q' to quit and save progress.")
 	fmt.Println()
 
-	ctrl.SetAllKeys(0, 0, 0)
+	_ = ctrl.SetAllKeys(0, 0, 0)
 	time.Sleep(500 * time.Millisecond)
 
 outer:
 	for row := 0; row < keyboard.GridRows; row++ {
 		for col := 0; col < keyboard.GridCols; col++ {
-			ctrl.SetKeyColor(row, col, 255, 0, 0)
+			_ = ctrl.SetKeyColor(row, col, 255, 0, 0)
 			fmt.Printf("  LED (%d,%2d): ", row, col)
 
 			var answer string
@@ -342,7 +344,7 @@ outer:
 			}
 			answer = strings.TrimSpace(strings.ToLower(answer))
 
-			ctrl.SetKeyColor(row, col, 0, 0, 0)
+			_ = ctrl.SetKeyColor(row, col, 0, 0, 0)
 
 			if answer == "q" {
 				break outer
@@ -370,7 +372,7 @@ func kbFirmware() error {
 	if err := ctrl.Open(); err != nil {
 		return err
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 
 	data, err := ctrl.GetFirmwareInfo()
 	if err != nil {
@@ -388,17 +390,17 @@ func restoreState(ctrl *keyboard.ITE8295, bundle map[string]any) error {
 
 	mode, _ := kbState["mode"].(string)
 	switch mode {
-	case "off":
-		ctrl.Off()
-	case "effect":
-		effect, _ := kbState["effect"].(string)
+	case actionOff:
+		_ = ctrl.Off()
+	case actionEffect:
+		effect, _ := kbState[actionEffect].(string)
 		if effect != "" {
 			speed := 3
 			if s, ok := config.GetInt(kbState, "speed"); ok {
 				speed = s
 			}
 			if animID, ok := keyboard.EffectNames[strings.ToLower(effect)]; ok {
-				ctrl.SetHWAnimation(animID)
+				_ = ctrl.SetHWAnimation(animID)
 			} else {
 				swName := strings.ToLower(effect)
 				if !strings.HasPrefix(swName, "sw_") {
@@ -409,7 +411,6 @@ func restoreState(ctrl *keyboard.ITE8295, bundle map[string]any) error {
 					opts := keyboard.DefaultEffectOpts()
 					opts.Speed = speed
 					runner.Start(fn, opts)
-					// Runner keeps going in background
 				}
 			}
 		}
@@ -418,20 +419,19 @@ func restoreState(ctrl *keyboard.ITE8295, bundle map[string]any) error {
 			r, _ := config.GetInt(map[string]any{"v": colorArr[0]}, "v")
 			g, _ := config.GetInt(map[string]any{"v": colorArr[1]}, "v")
 			b, _ := config.GetInt(map[string]any{"v": colorArr[2]}, "v")
-			ctrl.SetAllKeys(byte(r), byte(g), byte(b))
+			_ = ctrl.SetAllKeys(byte(r), byte(g), byte(b))
 		}
 	case "profile":
 		profilePath, _ := kbState["profile"].(string)
 		if profilePath != "" {
-			loadProfile(ctrl, profilePath)
+			_, _ = loadProfile(ctrl, profilePath)
 		}
 	}
 
 	if brightness, ok := config.GetInt(kbState, "brightness"); ok {
-		ctrl.SetBrightness(brightness)
+		_ = ctrl.SetBrightness(brightness)
 	}
 
-	// Restore per-key colors
 	if perKey, ok := kbState["per_key"].(map[string]any); ok {
 		keymap := keyboard.LoadKeymap()
 		for keyName, colorVal := range perKey {
@@ -441,15 +441,14 @@ func restoreState(ctrl *keyboard.ITE8295, bundle map[string]any) error {
 					r, _ := config.GetInt(map[string]any{"v": colorArr[0]}, "v")
 					g, _ := config.GetInt(map[string]any{"v": colorArr[1]}, "v")
 					b, _ := config.GetInt(map[string]any{"v": colorArr[2]}, "v")
-					ctrl.SetKeyColor(pos[0], pos[1], byte(r), byte(g), byte(b))
+					_ = ctrl.SetKeyColor(pos[0], pos[1], byte(r), byte(g), byte(b))
 				}
 			}
 		}
 	}
 
-	// Restore lightbar
 	if lbState, ok := bundle["lightbar"].(map[string]any); ok {
-		restoreLightbarState(lbState, nil)
+		_ = restoreLightbarState(lbState, nil)
 	}
 
 	return nil
@@ -469,11 +468,11 @@ func restoreLightbarState(lbState map[string]any, ctrl *lightbar.ITE8911) error 
 		}
 	}
 	if ownsCtrl {
-		defer ctrl.Close()
+		defer func() { _ = ctrl.Close() }()
 	}
 
 	mode, _ := state["mode"].(string)
-	if mode == "off" {
+	if mode == actionOff {
 		return ctrl.X58Off()
 	}
 
@@ -508,16 +507,16 @@ func loadProfile(ctrl *keyboard.ITE8295, profilePath string) (map[string]any, er
 	}
 
 	if brightness, ok := config.GetInt(profile, "brightness"); ok {
-		ctrl.SetBrightness(brightness)
+		_ = ctrl.SetBrightness(brightness)
 	}
 
-	if effect, ok := profile["effect"].(string); ok {
+	if effect, ok := profile[actionEffect].(string); ok {
 		speed := 3
 		if s, ok := config.GetInt(profile, "speed"); ok {
 			speed = s
 		}
 		if animID, ok := keyboard.EffectNames[strings.ToLower(effect)]; ok {
-			ctrl.SetHWAnimation(animID)
+			_ = ctrl.SetHWAnimation(animID)
 		} else {
 			swName := strings.ToLower(effect)
 			if !strings.HasPrefix(swName, "sw_") {
@@ -546,11 +545,10 @@ func loadProfile(ctrl *keyboard.ITE8295, profilePath string) (map[string]any, er
 				r, g, b = byte(rv), byte(gv), byte(bv)
 			}
 		}
-		ctrl.SetAllKeys(r, g, b)
+		_ = ctrl.SetAllKeys(r, g, b)
 	}
 
-	// Per-key colors
-	if keysMap, ok := profile["keys"].(map[string]any); ok {
+	if keysMap, ok := profile[actionKeys].(map[string]any); ok {
 		keymap := keyboard.LoadKeymap()
 		for keyName, colorVal := range keysMap {
 			pos, found := keyboard.GetKeyPosition(keyName, keymap)
@@ -569,16 +567,15 @@ func loadProfile(ctrl *keyboard.ITE8295, profilePath string) (map[string]any, er
 					r, g, b = byte(rv), byte(gv), byte(bv)
 				}
 			}
-			ctrl.SetKeyColor(pos[0], pos[1], r, g, b)
+			_ = ctrl.SetKeyColor(pos[0], pos[1], r, g, b)
 		}
 	}
 
-	// Lightbar section
 	if lbRaw, ok := profile["lightbar"].(map[string]any); ok {
 		mode, _ := lbRaw["mode"].(string)
-		if mode == "off" {
-			appliedState := map[string]any{"mode": "off"}
-			restoreLightbarState(appliedState, nil)
+		if mode == actionOff {
+			appliedState := map[string]any{"mode": actionOff}
+			_ = restoreLightbarState(appliedState, nil)
 			return appliedState, nil
 		}
 
@@ -613,18 +610,9 @@ func loadProfile(ctrl *keyboard.ITE8295, profilePath string) (map[string]any, er
 		}
 
 		appliedState := config.MergeLightbarState(nil, updates)
-		restoreLightbarState(appliedState, nil)
+		_ = restoreLightbarState(appliedState, nil)
 		return appliedState, nil
 	}
 
 	return nil, nil
-}
-
-// Helper to marshal profile data (used for JSON debugging)
-func toJSON(v any) string {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	return string(data)
 }

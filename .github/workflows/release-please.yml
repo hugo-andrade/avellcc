@@ -1,0 +1,99 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ github.token }}
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json
+
+      - name: Release outputs
+        run: |
+          echo "release_created=${{ steps.release.outputs.release_created }}"
+          echo "tag_name=${{ steps.release.outputs.tag_name }}"
+          echo "version=${{ steps.release.outputs.version }}"
+
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+        run: go build -trimpath -ldflags="-s -w -X github.com/hugo-andrade/avellcc/cmd.version=${VERSION}" -o avellcc .
+
+      - name: Package
+        run: |
+          VERSION="${{ needs.release-please.outputs.version }}"
+          ARCHIVE="avellcc-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
+          tar -czf "$ARCHIVE" avellcc udev/ systemd/
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: avellcc-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.ARCHIVE }}
+
+  upload-assets:
+    needs:
+      - release-please
+      - build
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          VERSION="${{ needs.release-please.outputs.version }}"
+          CHECKSUM_FILE="avellcc-${VERSION}-checksums.txt"
+          sha256sum avellcc-*.tar.gz > "$CHECKSUM_FILE"
+          echo "CHECKSUM_FILE=$CHECKSUM_FILE" >> "$GITHUB_ENV"
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ needs.release-please.outputs.tag_name }}"
+          gh release upload "$TAG" avellcc-*.tar.gz "${CHECKSUM_FILE}" --repo "$GITHUB_REPOSITORY" --clobber

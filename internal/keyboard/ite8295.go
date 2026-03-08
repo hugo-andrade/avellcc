@@ -17,8 +17,8 @@ const (
 	GridRows = 6
 	GridCols = 20
 
-	CmdSetEffect    = 0x00
-	CmdSetKeyColor  = 0x01
+	CmdSetEffect     = 0x00
+	CmdSetKeyColor   = 0x01
 	CmdSetBrightness = 0x09
 
 	HWAnimRandomColor = 0x09
@@ -38,8 +38,8 @@ func LedID(row, col int) int {
 
 // ITE8295 drives the ITE IT8295 per-key RGB keyboard controller.
 type ITE8295 struct {
-	dev      *hidraw.HidrawDevice
-	ownsDev  bool
+	dev     *hidraw.HidrawDevice
+	ownsDev bool
 }
 
 // NewITE8295 creates a new controller. If dev is nil, it auto-discovers the device.

@@ -129,7 +129,7 @@ func (m FanModel) View() tea.View {
 		sb.WriteString(header)
 
 		if hasRPM {
-			sb.WriteString(fmt.Sprintf("  %d RPM", rpm))
+			fmt.Fprintf(&sb, "  %d RPM", rpm)
 		} else {
 			sb.WriteString("  ? RPM")
 		}
@@ -137,7 +137,7 @@ func (m FanModel) View() tea.View {
 		if hasDuty {
 			clr := DutyColor(dutyPct)
 			bar := renderProgressBar(int(m.dutyPos[i-1]), 30, clr)
-			sb.WriteString(fmt.Sprintf("  %s %d%%", bar, dutyPct))
+			fmt.Fprintf(&sb, "  %s %d%%", bar, dutyPct)
 		}
 		sb.WriteString("\n")
 
@@ -164,7 +164,7 @@ func (m FanModel) View() tea.View {
 			clr := TempColor(t.Value)
 			name := LabelStyle.Render(t.Name)
 			val := lipgloss.NewStyle().Foreground(clr).Render(fmt.Sprintf("%.1f°C", t.Value))
-			sb.WriteString(fmt.Sprintf("  %s %s\n", name, val))
+			fmt.Fprintf(&sb, "  %s %s\n", name, val)
 		}
 		if len(coreTemps) > 0 {
 			min, max := coreTemps[0], coreTemps[0]
@@ -179,7 +179,7 @@ func (m FanModel) View() tea.View {
 			clr := TempColor(max)
 			label := LabelStyle.Render(fmt.Sprintf("CPU Cores (%d)", len(coreTemps)))
 			val := lipgloss.NewStyle().Foreground(clr).Render(fmt.Sprintf("%.0f-%.0f°C", min, max))
-			sb.WriteString(fmt.Sprintf("  %s %s\n", label, val))
+			fmt.Fprintf(&sb, "  %s %s\n", label, val)
 		}
 	}
 

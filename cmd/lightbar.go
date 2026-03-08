@@ -25,12 +25,12 @@ var (
 	lbColorIDSet bool
 
 	// Debug flags
-	lbDebugDescriptor bool
-	lbDebugGet        string
-	lbDebugRaw        string
-	lbDebugReport     string
-	lbDebugCommand    string
-	lbDebugData       string
+	lbDebugDescriptor  bool
+	lbDebugGet         string
+	lbDebugRaw         string
+	lbDebugReport      string
+	lbDebugCommand     string
+	lbDebugData        string
 	lbDebugFeatureSize string
 )
 
@@ -133,14 +133,13 @@ func runLightbar(cmd *cobra.Command, args []string) error {
 	if err := ctrl.Open(); err != nil {
 		return err
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 
-	// Primary actions
 	if lbOff {
 		if err := ctrl.X58Off(); err != nil {
 			return err
 		}
-		config.SaveLightbarState(map[string]any{"mode": "off"})
+		_ = config.SaveLightbarState(map[string]any{"mode": actionOff})
 		fmt.Println("Lightbar off.")
 		return nil
 	}
@@ -206,7 +205,7 @@ func runLightbar(cmd *cobra.Command, args []string) error {
 		if err := ctrl.X58Apply(applyEffect, applyColor, applyBrightness, applySpeed); err != nil {
 			return err
 		}
-		config.SaveLightbarState(savedState)
+		_ = config.SaveLightbarState(savedState)
 
 		effectName, _ := savedState["effect"].(string)
 		if effectName == "" {
@@ -348,7 +347,7 @@ func lightbarStatus(ctrl *lightbar.ITE8911) {
 		lbState = map[string]any{}
 	}
 	mode, _ := lbState["mode"].(string)
-	if mode == "off" {
+	if mode == actionOff {
 		fmt.Println("State: off")
 	} else {
 		effect, _ := lbState["effect"].(string)

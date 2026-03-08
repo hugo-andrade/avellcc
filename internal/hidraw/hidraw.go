@@ -16,8 +16,8 @@ import (
 
 // ioctl direction bits
 const (
-	iocWrite    = 1
-	iocRead     = 2
+	iocWrite     = 1
+	iocRead      = 2
 	iocReadWrite = 3
 )
 

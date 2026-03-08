@@ -1,0 +1,39 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+    - goconst
+    - whitespace
+    - gosec
+    - misspell
+  settings:
+    gosec:
+      excludes:
+        # hidraw ioctl requires unsafe.Pointer for syscall arguments
+        - G103
+        # int conversions for byte-level HID protocol are bounded by design
+        - G115
+        # config dirs need 0755 for XDG compliance
+        - G301
+        # sysfs paths and profile paths are trusted internal paths
+        - G304
+        # config files should be user-readable
+        - G306
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

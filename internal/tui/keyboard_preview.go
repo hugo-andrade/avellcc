@@ -12,11 +12,11 @@ import (
 
 // KeyboardModel displays a visual keyboard layout with colors.
 type KeyboardModel struct {
-	keymap   map[string][2]int
-	grid     [keyboard.GridRows][keyboard.GridCols]string // key name at each position
-	colors   map[string][3]byte                           // key name -> RGB
-	width    int
-	height   int
+	keymap map[string][2]int
+	grid   [keyboard.GridRows][keyboard.GridCols]string // key name at each position
+	colors map[string][3]byte                           // key name -> RGB
+	width  int
+	height int
 }
 
 func NewKeyboardModel(keymap map[string][2]int, colors map[string][3]byte) KeyboardModel {
@@ -34,7 +34,7 @@ func NewKeyboardModel(keymap map[string][2]int, colors map[string][3]byte) Keybo
 }
 
 func (m KeyboardModel) Init() tea.Cmd {
-	return func() tea.Msg { return tea.RequestWindowSize() }
+	return tea.RequestWindowSize
 }
 
 func (m KeyboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
