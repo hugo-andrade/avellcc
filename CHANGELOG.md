@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/hugo-andrade/avellcc/compare/v0.2.2...v0.2.3) (2026-03-08)
+
+
+### Features
+
+* add interactive TUI panels for keyboard, lightbar, and fan ([f932f80](https://github.com/hugo-andrade/avellcc/commit/f932f80f2f3d3d296538504eecfc766677088229))
+
 ## [0.2.2](https://github.com/hugo-andrade/avellcc/compare/v0.2.1...v0.2.2) (2026-03-08)
 
 
