@@ -84,12 +84,12 @@ def parse_bytes(spec: str | None) -> list[int]:
     return [parse_byte(part) for part in parts]
 
 
-def _normalize_lightbar_name(value: str) -> str:
+def _normalize_name(value: str) -> str:
     return re.sub(r'[\s_]+', '-', value.strip().lower())
 
 
-def parse_x58_effect(value: str) -> int:
-    s = _normalize_lightbar_name(value)
+def parse_lightbar_effect(value: str) -> int:
+    s = _normalize_name(value)
     aliases = {
         "changecolor": "change-color",
         "colorwave": "color-wave",
@@ -100,8 +100,8 @@ def parse_x58_effect(value: str) -> int:
     return parse_byte(value)
 
 
-def parse_x58_color_id(value: str) -> int:
-    s = _normalize_lightbar_name(value)
+def parse_lightbar_color(value: str) -> int:
+    s = _normalize_name(value)
     aliases = {
         "yellow-green": "lime",
         "chartreuse": "lime",
@@ -125,6 +125,10 @@ def parse_x58_color_id(value: str) -> int:
 def format_hex(data: bytes | bytearray | list[int]) -> str:
     return ' '.join(f'{int(b) & 0xFF:02x}' for b in data)
 
+
+# ---------------------------------------------------------------------------
+# State persistence
+# ---------------------------------------------------------------------------
 
 def save_state(state: dict):
     os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -160,7 +164,7 @@ def save_state_bundle(bundle: dict):
 
 def default_lightbar_state() -> dict:
     return {
-        'mode': 'x58',
+        'mode': 'active',
         'effect': X58_DEFAULT_EFFECT,
         'effect_code': X58_DEFAULT_EFFECT_CODE,
         'color_id': X58_DEFAULT_COLOR_ID,
@@ -214,7 +218,11 @@ def restore_lightbar_state(lightbar_state: dict | None, ctrl: ITE8911 | None = N
             ctrl.close()
 
 
-def cmd_led(args):
+# ---------------------------------------------------------------------------
+# Subcommand: keyboard  (was: led)
+# ---------------------------------------------------------------------------
+
+def cmd_keyboard(args):
     ctrl = ITE8295()
     ctrl.open()
     try:
@@ -249,7 +257,6 @@ def cmd_led(args):
             state['effect'] = args.effect
             state['speed'] = speed
             if result is not None:
-                # Software effect running in background
                 print(f"Software effect '{args.effect}' running (speed={speed}). Press Ctrl+C to stop.")
                 try:
                     import signal
@@ -358,12 +365,12 @@ def _load_profile(ctrl: ITE8295, profile_path: str) -> dict | None:
             effect = lightbar.get('effect')
             effect_code = lightbar.get('effect_code')
             if effect is not None:
-                effect_code = parse_x58_effect(str(effect))
+                effect_code = parse_lightbar_effect(str(effect))
 
             color = lightbar.get('color')
             color_id = lightbar.get('color_id')
             if color is not None:
-                color_id = parse_x58_color_id(str(color))
+                color_id = parse_lightbar_color(str(color))
 
             applied_state = merge_lightbar_state(
                 None,
@@ -377,6 +384,10 @@ def _load_profile(ctrl: ITE8295, profile_path: str) -> dict | None:
 
     return None
 
+
+# ---------------------------------------------------------------------------
+# Subcommand: fan
+# ---------------------------------------------------------------------------
 
 def cmd_fan(args):
     fc = FanController()
@@ -403,6 +414,10 @@ def cmd_fan(args):
     print(status_report(fc))
 
 
+# ---------------------------------------------------------------------------
+# Subcommand: keys
+# ---------------------------------------------------------------------------
+
 def cmd_keys(args):
     keymap = load_keymap()
     keys = list_keys(keymap)
@@ -415,6 +430,10 @@ def cmd_keys(args):
             print('  '.join(f'{k:15s}' for k in keys[i:i+8]))
 
 
+# ---------------------------------------------------------------------------
+# Subcommand: calibrate
+# ---------------------------------------------------------------------------
+
 def cmd_calibrate(args):
     """Interactive calibration: light up each LED and ask user which key it is."""
     ctrl = ITE8295()
@@ -426,20 +445,17 @@ def cmd_calibrate(args):
         print("Type the key name (e.g., 'esc', 'a', 'f1') or press Enter to skip.")
         print("Type 'q' to quit and save progress.\n")
 
-        # First turn off all LEDs
         ctrl.set_all_keys(0, 0, 0)
         time.sleep(0.5)
 
         for row in range(GRID_ROWS):
             for col in range(GRID_COLS):
-                # Light up this LED
                 ctrl.set_key_color(row, col, 255, 0, 0)
                 try:
                     answer = input(f"  LED ({row},{col:2d}): ").strip().lower()
                 except (EOFError, KeyboardInterrupt):
                     answer = 'q'
 
-                # Turn it off
                 ctrl.set_key_color(row, col, 0, 0, 0)
 
                 if answer == 'q':
@@ -460,6 +476,10 @@ def cmd_calibrate(args):
         ctrl.close()
 
 
+# ---------------------------------------------------------------------------
+# Subcommand: firmware
+# ---------------------------------------------------------------------------
+
 def cmd_firmware(args):
     ctrl = ITE8295()
     ctrl.open()
@@ -470,65 +490,43 @@ def cmd_firmware(args):
         ctrl.close()
 
 
+# ---------------------------------------------------------------------------
+# Subcommand: lightbar
+# ---------------------------------------------------------------------------
+
+LIGHTBAR_EFFECTS = sorted(X58_EFFECT_CODES.keys())
+LIGHTBAR_COLORS = sorted(X58_COLOR_IDS.keys())
+
+
 def cmd_lightbar(args):
-    if args.x58_effect is not None and args.x58_effect_code is not None:
-        raise ValueError("Choose either --x58-effect or --x58-effect-code.")
-    if args.x58_color is not None and args.x58_color_id is not None:
-        raise ValueError("Choose either --x58-color or --x58-color-id.")
-    if args.x58_static and (args.x58_effect is not None or args.x58_effect_code is not None):
-        raise ValueError("--x58-static already fixes the effect to static.")
+    # --- Resolve effect ---
+    effect_code = None
+    if getattr(args, 'effect', None) is not None:
+        effect_code = parse_lightbar_effect(args.effect)
+    elif getattr(args, 'effect_code', None) is not None:
+        effect_code = parse_byte(args.effect_code)
 
-    x58_apply_requested = (
-        not args.x58_static
-        and any(
-            value is not None
-            for value in [
-                args.x58_effect,
-                args.x58_effect_code,
-                args.x58_color,
-                args.x58_color_id,
-                args.x58_brightness,
-                args.x58_speed,
-            ]
-        )
-    )
+    # --- Resolve color ---
+    color_id = None
+    if getattr(args, 'color', None) is not None:
+        color_id = parse_lightbar_color(args.color)
+    elif getattr(args, 'color_id', None) is not None:
+        color_id = args.color_id
 
-    actions = []
-    if args.descriptor:
-        actions.append("descriptor")
-    if args.restore:
-        actions.append("restore")
-    if args.get is not None:
-        actions.append("get")
-    if args.raw is not None:
-        actions.append("raw")
-    if args.command_id is not None:
-        actions.append("command")
-    if args.x170_off:
-        actions.append("x170_off")
-    if args.x170_brightness is not None:
-        actions.append("x170_brightness")
-    if args.x170_mode is not None:
-        actions.append("x170_mode")
-    if args.x170_color_cmd is not None:
-        actions.append("x170_color")
-    if args.x58_off:
-        actions.append("x58_off")
-    if args.x58_static:
-        actions.append("x58_static")
-    if x58_apply_requested:
-        actions.append("x58_apply")
-    if len(actions) > 1:
-        raise ValueError("Choose only one lightbar action at a time.")
+    brightness = getattr(args, 'brightness', None)
+    speed = getattr(args, 'speed', None)
 
-    feature_size = parse_byte(args.feature_size)
+    has_update = any(v is not None for v in [effect_code, color_id, brightness, speed])
 
     ctrl = ITE8911()
     ctrl.open()
     try:
-        if args.descriptor:
-            data = ctrl.read_report_descriptor()
-            print(f"Descriptor ({len(data)} bytes): {format_hex(data)}")
+        # --- Primary actions ---
+
+        if args.off:
+            ctrl.x58_off()
+            save_lightbar_state({'mode': 'off'})
+            print("Lightbar off.")
             return
 
         if args.restore:
@@ -541,174 +539,95 @@ def cmd_lightbar(args):
             print("Lightbar state restored.")
             return
 
-        if args.get is not None:
-            report_id = parse_byte(args.get)
-            data = ctrl.get_feature(report_id, length=feature_size)
-            print(f"Feature 0x{report_id:02x}: {format_hex(data)}")
-            return
-
-        if args.raw is not None:
-            report_id = parse_byte(args.report)
-            payload = parse_bytes(args.raw)
-            ctrl.send_feature(report_id, payload, total_size=feature_size)
-            print(f"Sent report 0x{report_id:02x}: {format_hex([report_id] + payload)}")
-            return
-
-        if args.command_id is not None:
-            cmd = parse_byte(args.command_id)
-            payload = parse_bytes(args.data)
-            ctrl.send_command(cmd, payload, total_size=feature_size)
-            print(
-                f"Sent command 0x{cmd:02x} "
-                f"(report=0x{REPORT_ID_CTRL:02x}, feature_size={feature_size}): "
-                f"{format_hex([REPORT_ID_CTRL, cmd] + payload)}"
-            )
-            return
-
-        if args.x58_static:
-            if args.x58_color is not None:
-                color_id = parse_x58_color_id(args.x58_color)
-            elif args.x58_color_id is not None:
-                color_id = args.x58_color_id
-            else:
-                color_id = X58_DEFAULT_COLOR_ID
-            brightness = X58_DEFAULT_BRIGHTNESS if args.x58_brightness is None else args.x58_brightness
-            speed = X58_DEFAULT_SPEED if args.x58_speed is None else args.x58_speed
-            ctrl.x58_set_static(color_id=color_id, brightness=brightness, speed=speed)
-            save_lightbar_state(
-                merge_lightbar_state(
-                    None,
-                    mode='x58',
-                    effect=X58_DEFAULT_EFFECT,
-                    effect_code=X58_DEFAULT_EFFECT_CODE,
-                    color_id=color_id,
-                    brightness=brightness,
-                    speed=speed,
-                )
-            )
-            print(
-                "Sent grounded X58 static sequence "
-                f"(report=0x{REPORT_ID_CTRL:02x}, cmd=0x{X58_COMMAND:02x}, "
-                f"frame={WINDOWS_FRAME_SIZE}, color={X58_COLOR_NAMES.get(color_id, color_id)}, "
-                f"brightness={brightness}, speed={speed})."
-            )
-            return
-
-        if args.x58_off:
-            ctrl.x58_off()
-            save_lightbar_state({'mode': 'off'})
-            print(
-                "Sent grounded X58 off sequence "
-                f"(report=0x{REPORT_ID_CTRL:02x}, cmd=0x{X58_COMMAND:02x}, frame={WINDOWS_FRAME_SIZE})."
-            )
-            return
-
-        if x58_apply_requested:
-            if args.x58_effect is not None:
-                effect_code = parse_x58_effect(args.x58_effect)
-            elif args.x58_effect_code is not None:
-                effect_code = parse_byte(args.x58_effect_code)
-            else:
-                effect_code = None
-
-            if args.x58_color is not None:
-                color_id = parse_x58_color_id(args.x58_color)
-            elif args.x58_color_id is not None:
-                color_id = args.x58_color_id
-            else:
-                color_id = None
-
+        if has_update:
             current_state = load_state_bundle().get('lightbar')
             saved_state = merge_lightbar_state(
                 current_state,
-                mode='x58',
+                mode='active',
                 effect_code=effect_code,
                 color_id=color_id,
-                brightness=args.x58_brightness,
-                speed=args.x58_speed,
+                brightness=brightness,
+                speed=speed,
             )
             ctrl.x58_apply(
                 effect_code=effect_code,
                 color_id=color_id,
-                brightness=args.x58_brightness,
-                speed=args.x58_speed,
+                brightness=brightness,
+                speed=speed,
             )
             save_lightbar_state(saved_state)
 
-            parts = [f"frame={WINDOWS_FRAME_SIZE}"]
+            parts = []
             if effect_code is not None:
                 parts.append(f"effect={X58_EFFECT_NAMES.get(effect_code, hex(effect_code))}")
             if color_id is not None:
                 parts.append(f"color={X58_COLOR_NAMES.get(color_id, color_id)}")
-            if args.x58_brightness is not None:
-                parts.append(f"brightness={args.x58_brightness}")
-            if args.x58_speed is not None:
-                parts.append(f"speed={args.x58_speed}")
-            print("Sent grounded X58 update (" + ", ".join(parts) + ").")
+            if brightness is not None:
+                parts.append(f"brightness={brightness}")
+            if speed is not None:
+                parts.append(f"speed={speed}")
+            print("Lightbar updated: " + ", ".join(parts) + ".")
             return
 
-        if args.x170_off:
-            ctrl.x170_off()
-            print(
-                "Sent experimental X170-compatible off command "
-                f"(report=0x{REPORT_ID_CTRL:02x}, cmd=0x{X170_POWER_COMMAND:02x})."
-            )
+        # --- Debug actions ---
+
+        if getattr(args, 'debug_descriptor', False):
+            data = ctrl.read_report_descriptor()
+            print(f"Descriptor ({len(data)} bytes): {format_hex(data)}")
             return
 
-        if args.x170_brightness is not None:
-            ctrl.x170_set_brightness(args.x170_brightness)
-            print(
-                "Sent experimental X170-compatible brightness command "
-                f"(cmd=0x{X170_POWER_COMMAND:02x}, level={args.x170_brightness})."
-            )
+        if getattr(args, 'debug_get', None) is not None:
+            feature_size = parse_byte(args.debug_feature_size)
+            report_id = parse_byte(args.debug_get)
+            data = ctrl.get_feature(report_id, length=feature_size)
+            print(f"Feature 0x{report_id:02x}: {format_hex(data)}")
             return
 
-        if args.x170_mode is not None:
-            cmd = parse_byte(args.x170_mode)
-            ctrl.x170_set_mode(cmd, args.speed)
-            print(
-                "Sent experimental X170-compatible mode command "
-                f"(cmd=0x{cmd:02x}, speed={args.speed})."
-            )
+        if getattr(args, 'debug_raw', None) is not None:
+            feature_size = parse_byte(args.debug_feature_size)
+            report_id = parse_byte(args.debug_report)
+            payload = parse_bytes(args.debug_raw)
+            ctrl.send_feature(report_id, payload, total_size=feature_size)
+            print(f"Sent report 0x{report_id:02x}: {format_hex([report_id] + payload)}")
             return
 
-        if args.x170_color_cmd is not None:
-            if not args.color:
-                raise ValueError("--color is required with --x170-color-cmd")
-            cmd = parse_byte(args.x170_color_cmd)
-            r, g, b = parse_color(args.color)
-            ctrl.x170_set_color(cmd, args.speed, r, g, b)
-            print(
-                "Sent experimental X170-compatible color command "
-                f"(cmd=0x{cmd:02x}, speed={args.speed}, rgb={r},{g},{b})."
-            )
+        if getattr(args, 'debug_command', None) is not None:
+            feature_size = parse_byte(args.debug_feature_size)
+            cmd = parse_byte(args.debug_command)
+            payload = parse_bytes(getattr(args, 'debug_data', None))
+            ctrl.send_command(cmd, payload, total_size=feature_size)
+            print(f"Sent command 0x{cmd:02x}: {format_hex([REPORT_ID_CTRL, cmd] + payload)}")
             return
 
-        print(f"Lightbar device: {ctrl.path}")
-        print(f"Linux descriptor-sized feature length: {DESCRIPTOR_REPORT_SIZE}")
-        print(f"Windows X58 feature frame length: {WINDOWS_FRAME_SIZE}")
-        print(
-            "Known X58 effects: "
-            + ", ".join(f"{name}=0x{code:02x}" for name, code in X58_EFFECT_CODES.items())
-        )
-        print(
-            "Known X58 colors: "
-            + ", ".join(
-                f"{name}=id{color_id}:{X58_COLOR_HEX[color_id]}"
-                for name, color_id in X58_COLOR_IDS.items()
-            )
-        )
-        print(f"Known X170 effect commands: {', '.join(f'0x{cmd:02x}' for cmd in X170_EFFECT_COMMANDS)}")
-        print(f"Known X170 power command: 0x{X170_POWER_COMMAND:02x}")
-        print(f"Descriptor: {format_hex(ctrl.read_report_descriptor())}")
-        for report_id in (REPORT_ID_INFO, REPORT_ID_CTRL):
-            try:
-                print(f"Feature 0x{report_id:02x}: {format_hex(ctrl.get_feature(report_id))}")
-            except OSError as e:
-                print(f"Feature 0x{report_id:02x}: read failed ({e})")
+        # --- Default: show lightbar info ---
+        _lightbar_status(ctrl)
+
     finally:
         ctrl.close()
 
+
+def _lightbar_status(ctrl: ITE8911):
+    """Show lightbar device info and current saved state."""
+    print(f"Device: {ctrl.path}")
+    bundle = load_state_bundle()
+    lb_state = bundle.get('lightbar', {})
+    mode = lb_state.get('mode', 'unknown')
+    if mode == 'off':
+        print("State: off")
+    else:
+        effect = lb_state.get('effect', '?')
+        color_id = lb_state.get('color_id')
+        color_name = X58_COLOR_NAMES.get(color_id, '?') if color_id else '?'
+        brightness = lb_state.get('brightness', '?')
+        speed = lb_state.get('speed', '?')
+        print(f"State: effect={effect}, color={color_name}, brightness={brightness}, speed={speed}")
+    print(f"\nEffects: {', '.join(LIGHTBAR_EFFECTS)}")
+    print(f"Colors:  {', '.join(LIGHTBAR_COLORS)}")
+
+
+# ---------------------------------------------------------------------------
+# Main parser
+# ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
@@ -718,20 +637,56 @@ def main():
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     sub = parser.add_subparsers(dest='subcommand')
 
-    # LED subcommand
-    led_p = sub.add_parser('led', help='Control keyboard RGB LEDs')
-    led_p.add_argument('--color', '-c', help='Set color (hex, name, or R,G,B)')
-    led_p.add_argument('--key', '-k', help='Target a specific key')
+    # --- keyboard (was: led) ---
+    kb_p = sub.add_parser('keyboard', aliases=['kb'], help='Control keyboard RGB LEDs')
+    kb_p.add_argument('--color', '-c', help='Set color (hex, name, or R,G,B)')
+    kb_p.add_argument('--key', '-k', help='Target a specific key')
     all_effects = sorted(set(EFFECT_NAMES) | set(SOFTWARE_EFFECTS))
-    led_p.add_argument('--effect', '-e', help=f'Set effect ({", ".join(all_effects)})')
-    led_p.add_argument('--speed', '-s', type=int, help='Effect speed (0-10)')
-    led_p.add_argument('--brightness', '-b', type=int, help='Set brightness (0-10)')
-    led_p.add_argument('--off', action='store_true', help='Turn off LEDs')
-    led_p.add_argument('--restore', action='store_true', help='Restore saved state')
-    led_p.add_argument('--profile', '-p', help='Load a profile JSON file')
-    led_p.set_defaults(func=cmd_led)
+    kb_p.add_argument('--effect', '-e', help=f'Set effect ({", ".join(all_effects)})')
+    kb_p.add_argument('--speed', '-s', type=int, help='Effect speed (0-10)')
+    kb_p.add_argument('--brightness', '-b', type=int, help='Set brightness (0-10)')
+    kb_p.add_argument('--off', action='store_true', help='Turn off keyboard LEDs')
+    kb_p.add_argument('--restore', action='store_true', help='Restore saved state')
+    kb_p.add_argument('--profile', '-p', help='Load a profile JSON file')
+    kb_p.set_defaults(func=cmd_keyboard)
 
-    # Fan subcommand
+    # --- lightbar ---
+    lb_p = sub.add_parser('lightbar', aliases=['lb'], help='Control rear lightbar')
+    lb_p.add_argument('--effect', '-e', metavar='NAME',
+                       help=f'Set effect ({", ".join(LIGHTBAR_EFFECTS)})')
+    lb_p.add_argument('--color', '-c', metavar='NAME',
+                       help=f'Set color ({", ".join(LIGHTBAR_COLORS)})')
+    lb_p.add_argument('--brightness', '-b', type=int, metavar='N',
+                       help='Set brightness (0-4)')
+    lb_p.add_argument('--speed', '-s', type=int, metavar='N',
+                       help='Set animation speed')
+    lb_p.add_argument('--off', action='store_true', help='Turn off lightbar')
+    lb_p.add_argument('--restore', action='store_true', help='Restore saved state')
+    # Advanced (rarely needed)
+    lb_p.add_argument('--effect-code', metavar='HEX',
+                       help='Set effect by raw hex code')
+    lb_p.add_argument('--color-id', type=int, metavar='N',
+                       help='Set color by raw ID')
+
+    # Debug group (for reverse engineering / troubleshooting)
+    lb_dbg = lb_p.add_argument_group('debug', 'Low-level HID commands for troubleshooting')
+    lb_dbg.add_argument('--debug-descriptor', action='store_true',
+                         help='Dump the HID report descriptor')
+    lb_dbg.add_argument('--debug-get', metavar='REPORT_ID',
+                         help='Read a HID feature report (e.g. 0x5A)')
+    lb_dbg.add_argument('--debug-raw', metavar='BYTES',
+                         help='Send raw payload bytes (report ID via --debug-report)')
+    lb_dbg.add_argument('--debug-report', default='0xCD',
+                         help='Report ID for --debug-raw (default: 0xCD)')
+    lb_dbg.add_argument('--debug-command', metavar='CMD',
+                         help='Send a command byte on report 0xCD')
+    lb_dbg.add_argument('--debug-data', metavar='BYTES',
+                         help='Payload bytes for --debug-command')
+    lb_dbg.add_argument('--debug-feature-size', default=str(DESCRIPTOR_REPORT_SIZE),
+                         help=f'Feature frame size (default: {DESCRIPTOR_REPORT_SIZE})')
+    lb_p.set_defaults(func=cmd_lightbar)
+
+    # --- fan ---
     fan_p = sub.add_parser('fan', help='Control fans and view thermals')
     fan_p.add_argument('--status', action='store_true', help='Show fan and temperature status')
     fan_p.add_argument('--speed', type=int, help='Set fan speed (0-100%%)')
@@ -739,101 +694,18 @@ def main():
     fan_p.add_argument('--auto', action='store_true', help='Set fans to automatic mode')
     fan_p.set_defaults(func=cmd_fan)
 
-    # Keys subcommand
+    # --- keys ---
     keys_p = sub.add_parser('keys', help='List known key names')
     keys_p.add_argument('-v', '--verbose', action='store_true', help='Show grid positions')
     keys_p.set_defaults(func=cmd_keys)
 
-    # Calibrate subcommand
+    # --- calibrate ---
     cal_p = sub.add_parser('calibrate', help='Interactively calibrate key-to-LED mapping')
     cal_p.set_defaults(func=cmd_calibrate)
 
-    # Firmware subcommand
-    fw_p = sub.add_parser('firmware', help='Show firmware info')
+    # --- firmware ---
+    fw_p = sub.add_parser('firmware', help='Show keyboard firmware info')
     fw_p.set_defaults(func=cmd_firmware)
-
-    # Lightbar subcommand
-    lb_p = sub.add_parser('lightbar', help='Control the 048d:8911 rear lightbar')
-    lb_p.add_argument('--descriptor', action='store_true', help='Dump the HID report descriptor')
-    lb_p.add_argument('--restore', action='store_true', help='Restore the saved X58 lightbar state')
-    lb_p.add_argument('--get', metavar='REPORT_ID', help='Read a feature report (for example 0x5A or 0xCD)')
-    lb_p.add_argument(
-        '--feature-size',
-        default=str(DESCRIPTOR_REPORT_SIZE),
-        help='Feature report size for --get/--raw/--command (default: 17, Windows X58 uses 64)',
-    )
-    lb_p.add_argument(
-        '--raw',
-        metavar='BYTES',
-        help='Send raw payload bytes to the report selected by --report. The report ID byte is added automatically.',
-    )
-    lb_p.add_argument('--report', default='0xCD', help='Report ID used with --raw (default: 0xCD)')
-    lb_p.add_argument(
-        '--command',
-        dest='command_id',
-        metavar='CMD',
-        help='Send a candidate command byte on report 0xCD. Use --data for the payload bytes.',
-    )
-    lb_p.add_argument('--data', metavar='BYTES', help='Payload bytes for --command')
-    lb_p.add_argument('--x170-off', action='store_true', help='Send the old X170 off/power command (experimental)')
-    lb_p.add_argument(
-        '--x170-brightness',
-        type=int,
-        help='Send the old X170 brightness command (experimental, 0-255)',
-    )
-    lb_p.add_argument(
-        '--x170-mode',
-        metavar='CMD',
-        help='Send an old X170 mode command (for example 0xB0, 0xB2, 0xB3, 0xB5)',
-    )
-    lb_p.add_argument(
-        '--x170-color-cmd',
-        metavar='CMD',
-        help='Send an old X170 color payload (for example 0xB0, 0xB2, 0xB3, 0xB5)',
-    )
-    lb_p.add_argument('--speed', type=int, default=3, help='Speed byte used by the experimental X170 helpers')
-    lb_p.add_argument('--color', help='Color used by --x170-color-cmd')
-    lb_p.add_argument(
-        '--x58-off',
-        action='store_true',
-        help='Send the grounded LightBar_X58 off sequence on 0xCD using 64-byte frames',
-    )
-    lb_p.add_argument(
-        '--x58-static',
-        action='store_true',
-        help='Send the grounded LightBar_X58 static sequence on 0xCD using 64-byte frames',
-    )
-    lb_p.add_argument(
-        '--x58-effect',
-        metavar='NAME',
-        help='Grounded LightBar_X58 effect name: static, breathe, wave, change-color, granular, color-wave',
-    )
-    lb_p.add_argument(
-        '--x58-effect-code',
-        metavar='CODE',
-        help='Send a grounded LightBar_X58 effect code on report 0xCD with a 64-byte frame',
-    )
-    lb_p.add_argument(
-        '--x58-color',
-        metavar='NAME',
-        help='Grounded LightBar_X58 color name or hex: red, yellow, lime, green, cyan, blue, purple',
-    )
-    lb_p.add_argument(
-        '--x58-brightness',
-        type=int,
-        help='Send a grounded LightBar_X58 brightness level (Windows UI range 0-4)',
-    )
-    lb_p.add_argument(
-        '--x58-speed',
-        type=int,
-        help='Send a grounded LightBar_X58 speed value with a 64-byte frame',
-    )
-    lb_p.add_argument(
-        '--x58-color-id',
-        type=int,
-        help='Send a grounded LightBar_X58 color ID with a 64-byte frame',
-    )
-    lb_p.set_defaults(func=cmd_lightbar)
 
     args = parser.parse_args()
     if not args.subcommand:
