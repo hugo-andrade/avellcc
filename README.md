@@ -13,10 +13,28 @@ Linux control center for **Avell Storm 590X** (Clevo barebone) laptops. Per-key 
 
 ## Install
 
-```bash
-# Dependencies
-pip install hidapi
+System requirements:
 
+- Python 3.10+
+- `git`
+- `udev`
+- Linux `hidraw` support
+- Python package `hidapi` and, on distros without wheel support, the system `hidapi` library/devel package
+
+Packages by distro:
+
+```bash
+# Arch Linux
+sudo pacman -S --needed python python-pip git hidapi
+
+# Debian / Ubuntu
+sudo apt install python3 python3-pip python3-venv git libhidapi-hidraw0 libhidapi-dev
+
+# Fedora
+sudo dnf install python3 python3-pip git hidapi hidapi-devel
+```
+
+```bash
 # Install
 git clone git@github.com:hugo-andrade/avellcc.git
 cd avellcc
@@ -55,7 +73,28 @@ avellcc led --restore                  # Restore saved state
 avellcc fan --status                   # RPM + temperatures
 ```
 
-Fan speed control requires `acpi_call-dkms` or `tuxedo-drivers-dkms`:
+Fan speed control requires a writable backend. Today the practical path is
+`acpi_call`; `tuxedo_io` readout exists but write support is not implemented in
+this project yet.
+
+```bash
+# Arch Linux
+sudo pacman -S --needed linux-headers acpi_call-dkms
+
+# Debian / Ubuntu
+sudo apt install dkms acpi-call-dkms linux-headers-$(uname -r)
+
+# Fedora
+sudo dnf install dkms kernel-devel
+```
+
+Then load the module:
+
+```bash
+sudo modprobe acpi_call
+```
+
+After that:
 
 ```bash
 avellcc fan --speed 80                 # All fans 80%
@@ -129,8 +168,19 @@ JSON files in `~/.config/avellcc/profiles/`:
 
 ## Restore on boot
 
+If `avellcc` is not installed in a system path, first check where the CLI was
+installed:
+
+```bash
+command -v avellcc
+```
+
+Then copy the service and, if needed, adjust `ExecStart=` to the path returned
+above.
+
 ```bash
 sudo cp systemd/avellcc-restore.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl enable avellcc-restore.service
 ```
 
@@ -156,7 +206,8 @@ Key positions confirmed via [tuxedo-drivers](https://github.com/tuxedocomputers/
 Built and tested on Arch Linux. Should work on any distro with:
 - Python >= 3.10
 - hidraw kernel support (standard)
-- USB HID device `048d:8910`
+- USB HID devices `048d:8910` and `048d:8911`
+- `udev` rules installed for non-root LED/lightbar access
 
 Other Clevo-based laptops with the same ITE IT8295 controller (TUXEDO, Sager, etc.) should also work.
 

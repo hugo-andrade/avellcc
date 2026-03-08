@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/avellcc led --restore
+ExecStart=/usr/bin/env avellcc led --restore
 RemainAfterExit=yes
 
 [Install]
