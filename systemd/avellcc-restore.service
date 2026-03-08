@@ -1,0 +1,11 @@
+[Unit]
+Description=Restore Avell Control Center LED state
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/avellcc led --restore
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
