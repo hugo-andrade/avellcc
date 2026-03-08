@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/env avellcc keyboard --restore
+ExecStart=/usr/local/bin/avellcc keyboard --restore
 RemainAfterExit=yes
 
 [Install]

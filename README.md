@@ -2,6 +2,8 @@
 
 Linux control center for **Avell Storm 590X** (Clevo barebone) laptops. Per-key RGB keyboard LEDs, rear lightbar, fan control, and thermal monitoring — no Windows required.
 
+Single static binary, zero dependencies.
+
 ## Hardware
 
 | Component | Details |
@@ -13,27 +15,17 @@ Linux control center for **Avell Storm 590X** (Clevo barebone) laptops. Per-key 
 
 ## Install
 
-System requirements:
+Requirements:
 
-- Python 3.10+
-- Linux `hidraw` support
+- Linux with `hidraw` support
+- Go 1.22+ (build only)
 - `acpi_call-dkms` for fan speed control (optional)
-
-```bash
-# Arch Linux
-sudo pacman -S --needed python python-pip git hidapi
-
-# Debian / Ubuntu
-sudo apt install python3 python3-pip python3-venv git libhidapi-hidraw0 libhidapi-dev
-
-# Fedora
-sudo dnf install python3 python3-pip git hidapi hidapi-devel
-```
 
 ```bash
 git clone git@github.com:hugo-andrade/avellcc.git
 cd avellcc
-pip install -e .
+go build -o avellcc .
+sudo install -m 755 avellcc /usr/local/bin/
 
 # udev rules (required for non-root access to keyboard and lightbar)
 sudo cp udev/99-avell-keyboard.rules /etc/udev/rules.d/
@@ -69,7 +61,6 @@ avellcc kb -c red -b 7                    # Short alias
 ```bash
 avellcc lightbar                          # Show status and available effects/colors
 avellcc lightbar --effect static --color blue --brightness 4
-avellcc lightbar --effect static --color purple --brightness 4
 avellcc lightbar --effect wave --speed 5
 avellcc lightbar --effect color-wave
 avellcc lightbar --effect change-color
@@ -84,18 +75,17 @@ Available effects: `static`, `breathe`, `wave`, `change-color`, `granular`, `col
 
 Available colors: `red`, `yellow`, `lime`, `green`, `cyan`, `blue`, `purple`
 
-On the Storm 590X, `wave` and `color-wave` are currently confirmed as RGB
-automatic modes. `static` is the grounded single-color mode.
-
 ### Fans
 
 ```bash
-avellcc fan                               # Show RPM + temperatures
-avellcc fan --status                      # Same as above
+avellcc fan                               # Live TUI dashboard (interactive terminal)
+avellcc fan --status                      # Plain text output
 avellcc fan --speed 80                    # All fans 80%
 avellcc fan --speed 100 --fan 1           # Fan 1 at 100%
 avellcc fan --auto                        # Back to automatic
 ```
+
+The TUI dashboard shows live RPM sparklines, duty progress bars, and temperatures. Keyboard shortcuts: `+` max, `-` min, `a` auto, `q` quit.
 
 Fan speed control requires the `acpi_call` kernel module:
 
@@ -105,9 +95,6 @@ sudo pacman -S --needed linux-headers acpi_call-dkms
 
 # Debian / Ubuntu
 sudo apt install dkms acpi-call-dkms linux-headers-$(uname -r)
-
-# Fedora
-sudo dnf install dkms kernel-devel
 ```
 
 ```bash
@@ -189,7 +176,7 @@ ACPI method `\_SB.WMI.WMBB` (GUID `ABBC0F6D`, 3 args: instance, command, data).
 
 ## Compatibility
 
-Built and tested on Arch Linux. Should work on any distro with Python >= 3.10 and hidraw support. Other Clevo-based laptops with ITE IT8295 (TUXEDO, Sager, etc.) should also work.
+Built and tested on Arch Linux. Should work on any distro with hidraw support. Other Clevo-based laptops with ITE IT8295 (TUXEDO, Sager, etc.) should also work.
 
 ## License
 

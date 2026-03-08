@@ -1,7 +1,1 @@
-__pycache__/
-*.pyc
-*.egg-info/
-dist/
-build/
-*.egg
-.venv/
+avellcc
