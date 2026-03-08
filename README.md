@@ -238,7 +238,3 @@ ACPI method `\_SB.WMI.WMBB` (GUID `ABBC0F6D`, 3 args: instance, command, data).
 ## Compatibility
 
 Built and tested on Arch Linux. Should work on any distro with hidraw support. Other Clevo-based laptops with ITE IT8295 (TUXEDO, Sager, etc.) should also work.
-
-## License
-
-GPL-3.0-or-later
