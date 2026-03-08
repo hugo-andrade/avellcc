@@ -7,7 +7,7 @@ Linux control center for **Avell Storm 590X** (Clevo barebone) laptops. Per-key 
 | Component | Details |
 |---|---|
 | Keyboard LED Controller | ITE IT8295, USB `048d:8910` |
-| Secondary Device | ITE `048d:8911` (lightbar/side LEDs — WIP) |
+| Secondary Device | ITE `048d:8911` (X58 lightbar support) |
 | Fans | 2x ACPI fans via hwmon |
 | WMI | Clevo WMBB (`ABBC0F6D`) for fan control |
 
@@ -63,6 +63,37 @@ avellcc fan --speed 100 --fan 1        # Fan 1 at 100%
 avellcc fan --auto                     # Back to automatic
 ```
 
+### Lightbar
+
+```bash
+avellcc lightbar --x58-off
+avellcc lightbar --restore
+avellcc lightbar --x58-effect static --x58-color blue --x58-brightness 4 --x58-speed 3
+avellcc lightbar --x58-effect breathe --x58-color purple --x58-brightness 4 --x58-speed 3
+avellcc lightbar --x58-effect wave --x58-brightness 4 --x58-speed 3
+avellcc lightbar --x58-effect color-wave --x58-brightness 4 --x58-speed 3
+avellcc lightbar --x58-effect change-color --x58-brightness 4 --x58-speed 3
+avellcc lightbar --x58-effect granular --x58-color purple --x58-brightness 4 --x58-speed 3
+
+# Raw / reverse-engineering access
+avellcc lightbar --descriptor
+avellcc lightbar --get 0x5A
+avellcc lightbar --get 0xCD --feature-size 64
+avellcc lightbar --raw "bf 05"
+avellcc lightbar --command 0xe2 --data "05" --feature-size 64
+
+# Legacy X170 probing
+avellcc lightbar --x170-off
+avellcc lightbar --x170-brightness 5
+avellcc lightbar --x170-color-cmd 0xb0 --speed 3 --color blue
+```
+
+The practical path for the Storm 590X is `LightBar_X58` on `048d:8911`. It
+uses `cmd 0xE2` inside a 64-byte HID feature frame and is now integrated as a
+normal project feature. `avellcc led --restore` restores both keyboard and
+lightbar state. The legacy X170 helpers remain only for comparison with older
+models. Details are in [`docs/lightbar-re.md`](docs/lightbar-re.md).
+
 ### Other
 
 ```bash
@@ -79,6 +110,12 @@ JSON files in `~/.config/avellcc/profiles/`:
 {
     "brightness": 10,
     "color": "black",
+    "lightbar": {
+        "effect": "static",
+        "color": "blue",
+        "brightness": 4,
+        "speed": 3
+    },
     "keys": {
         "w": "#FF0000",
         "a": "#FF0000",
@@ -96,6 +133,9 @@ JSON files in `~/.config/avellcc/profiles/`:
 sudo cp systemd/avellcc-restore.service /etc/systemd/system/
 sudo systemctl enable avellcc-restore.service
 ```
+
+The restore service uses `avellcc led --restore`, which now restores both the
+keyboard and the saved X58 lightbar state.
 
 ## Protocol
 

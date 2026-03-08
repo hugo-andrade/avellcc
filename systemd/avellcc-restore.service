@@ -1,5 +1,5 @@
 [Unit]
-Description=Restore Avell Control Center LED state
+Description=Restore Avell Control Center keyboard and lightbar state
 After=multi-user.target
 
 [Service]
