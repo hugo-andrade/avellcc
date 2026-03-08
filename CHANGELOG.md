@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4](https://github.com/hugo-andrade/avellcc/compare/v0.2.3...v0.2.4) (2026-03-08)
+
+
+### Bug Fixes
+
+* rename udev rules and improve systemd service ([0a3ec6f](https://github.com/hugo-andrade/avellcc/commit/0a3ec6f250d820d58fb7c7a12b7a62fb12876443))
+* rename udev rules to 99-avellcc.rules for naming consistency ([9a2212a](https://github.com/hugo-andrade/avellcc/commit/9a2212a3fa6738cef6c2307d70152429611ef199))
+
 ## [0.2.3](https://github.com/hugo-andrade/avellcc/compare/v0.2.2...v0.2.3) (2026-03-08)
 
 
