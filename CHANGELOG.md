@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/hugo-andrade/avellcc/compare/v0.2.1...v0.2.2) (2026-03-08)
+
+
+### Features
+
+* add install script and improve README installation docs ([8945ae6](https://github.com/hugo-andrade/avellcc/commit/8945ae64e7ff448dbaa2690a1216e9cde34e2ead))
+
 ## [0.2.1](https://github.com/hugo-andrade/avellcc/compare/v0.2.0...v0.2.1) (2026-03-08)
 
 
