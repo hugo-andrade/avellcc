@@ -202,8 +202,7 @@ def cmd_fan(args):
             fc.set_fan_speed(args.fan, args.speed)
             print(f"Fan {args.fan} set to {args.speed}%.")
         else:
-            fc.set_fan_speed(1, args.speed)
-            fc.set_fan_speed(2, args.speed)
+            fc.set_fan_speed(0, args.speed)
             print(f"All fans set to {args.speed}%.")
         return
 
