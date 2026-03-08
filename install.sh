@@ -107,7 +107,7 @@ fi
 ok "Installed avellcc to ${INSTALL_DIR}/avellcc"
 
 # --- Install udev rules ---
-UDEV_SRC="${TMP}/udev/99-avell-keyboard.rules"
+UDEV_SRC="${TMP}/udev/99-avell.rules"
 UDEV_DIR="/etc/udev/rules.d"
 
 if [ -f "$UDEV_SRC" ]; then
@@ -118,7 +118,7 @@ if [ -f "$UDEV_SRC" ]; then
 else
     echo ""
     printf "${BOLD}NOTE:${RESET} udev rules were not included in this release.\n"
-    printf "For non-root access, create %s/99-avell-keyboard.rules with:\n" "$UDEV_DIR"
+    printf "For non-root access, create %s/99-avell.rules with:\n" "$UDEV_DIR"
     printf '  SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="8910", MODE="0666"\n'
     printf '  SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="8911", MODE="0666"\n'
 fi

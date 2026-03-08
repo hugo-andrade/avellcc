@@ -1,0 +1,8 @@
+# Avell Storm 590X / Clevo — ITE HID controllers
+# Allows non-root access to keyboard RGB and rear lightbar devices.
+
+# ITE IT8295 — keyboard RGB LED controller
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="8910", MODE="0666"
+
+# ITE 8911 — rear lightbar controller
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="8911", MODE="0666"

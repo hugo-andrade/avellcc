@@ -68,7 +68,7 @@ sudo install -m 755 avellcc /usr/local/bin/
 Required for non-root access to the keyboard and lightbar HID devices:
 
 ```bash
-sudo cp udev/99-avell-keyboard.rules /etc/udev/rules.d/
+sudo cp udev/99-avell.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
@@ -200,7 +200,7 @@ Or manually:
 ```bash
 sudo systemctl disable --now avellcc-restore.service
 sudo rm -f /usr/local/bin/avellcc
-sudo rm -f /etc/udev/rules.d/99-avell-keyboard.rules
+sudo rm -f /etc/udev/rules.d/99-avell.rules
 sudo rm -f /etc/systemd/system/avellcc-restore.service
 sudo udevadm control --reload-rules
 sudo systemctl daemon-reload

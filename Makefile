@@ -69,7 +69,7 @@ SERVICEDIR  = /etc/systemd/system
 install: build-static ## Install binary, udev rules, and systemd service
 	sudo install -Dm755 $(BINARY) $(BINDIR)/avellcc
 	@echo "Installed avellcc to $(BINDIR)/avellcc"
-	@sudo cp udev/99-avell-keyboard.rules $(UDEVDIR)/
+	@sudo cp udev/99-avell.rules $(UDEVDIR)/
 	@sudo udevadm control --reload-rules && sudo udevadm trigger
 	@echo "udev rules installed."
 	@sudo cp systemd/avellcc-restore.service $(SERVICEDIR)/
@@ -81,7 +81,7 @@ install: build-static ## Install binary, udev rules, and systemd service
 uninstall: ## Remove binary, udev rules, and systemd service
 	-sudo systemctl disable --now avellcc-restore.service 2>/dev/null
 	sudo rm -f $(BINDIR)/avellcc
-	sudo rm -f $(UDEVDIR)/99-avell-keyboard.rules
+	sudo rm -f $(UDEVDIR)/99-avell.rules
 	sudo rm -f $(SERVICEDIR)/avellcc-restore.service
 	-sudo udevadm control --reload-rules 2>/dev/null
 	-sudo systemctl daemon-reload 2>/dev/null

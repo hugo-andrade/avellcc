@@ -1,6 +1,7 @@
 [Unit]
-Description=Restore Avell Control Center keyboard and lightbar state
-After=multi-user.target
+Description=Restore avellcc keyboard and lightbar state
+After=multi-user.target systemd-udev-settle.service
+Wants=systemd-udev-settle.service
 
 [Service]
 Type=oneshot
