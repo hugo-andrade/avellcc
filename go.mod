@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	charm.land/bubbletea/v2 v2.0.1
-	charm.land/lipgloss/v2 v2.0.0
+	charm.land/lipgloss/v2 v2.0.2
 	github.com/charmbracelet/harmonica v0.2.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.42.0
