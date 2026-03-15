@@ -3,7 +3,7 @@ module github.com/hugo-andrade/avellcc
 go 1.26.1
 
 require (
-	charm.land/bubbletea/v2 v2.0.1
+	charm.land/bubbletea/v2 v2.0.2
 	charm.land/lipgloss/v2 v2.0.0
 	github.com/charmbracelet/harmonica v0.2.0
 	github.com/spf13/cobra v1.10.2
