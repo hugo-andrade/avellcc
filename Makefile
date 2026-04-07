@@ -64,25 +64,32 @@ PREFIX     ?= /usr/local
 BINDIR      = $(PREFIX)/bin
 UDEVDIR     = /etc/udev/rules.d
 SERVICEDIR  = /etc/systemd/system
+SLEEPDIR    = /usr/lib/systemd/system-sleep
 
 .PHONY: install
-install: build-static ## Install binary, udev rules, and systemd service
+install: build-static ## Install binary, udev rules, systemd service, and sleep hook
 	sudo install -Dm755 $(BINARY) $(BINDIR)/avellcc
 	@echo "Installed avellcc to $(BINDIR)/avellcc"
 	@sudo cp udev/99-avellcc.rules $(UDEVDIR)/
 	@sudo udevadm control --reload-rules && sudo udevadm trigger
 	@echo "udev rules installed."
-	@sudo cp systemd/avellcc-restore.service $(SERVICEDIR)/
+	@-sudo systemctl disable --now avellcc-restore.service 2>/dev/null
+	@sudo rm -f $(SERVICEDIR)/avellcc-restore.service
+	@sudo cp systemd/avellcc.service $(SERVICEDIR)/
+	@sudo install -Dm755 systemd/system-sleep/avellcc $(SLEEPDIR)/avellcc
 	@sudo systemctl daemon-reload
-	@echo "systemd service installed."
-	@echo "  Enable: sudo systemctl enable avellcc-restore.service"
+	@echo "systemd service and suspend/resume hook installed."
+	@echo "  Enable: sudo systemctl enable avellcc.service"
 
 .PHONY: uninstall
-uninstall: ## Remove binary, udev rules, and systemd service
+uninstall: ## Remove binary, udev rules, systemd service, and sleep hook
+	-sudo systemctl disable --now avellcc.service 2>/dev/null
 	-sudo systemctl disable --now avellcc-restore.service 2>/dev/null
 	sudo rm -f $(BINDIR)/avellcc
 	sudo rm -f $(UDEVDIR)/99-avellcc.rules
+	sudo rm -f $(SERVICEDIR)/avellcc.service
 	sudo rm -f $(SERVICEDIR)/avellcc-restore.service
+	sudo rm -f $(SLEEPDIR)/avellcc
 	-sudo udevadm control --reload-rules 2>/dev/null
 	-sudo systemctl daemon-reload 2>/dev/null
 	@echo "avellcc uninstalled."

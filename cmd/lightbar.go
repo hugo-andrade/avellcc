@@ -23,7 +23,6 @@ var (
 	lbSpeed      int
 	lbSpeedSet   bool
 	lbOff        bool
-	lbRestoreF   bool
 	lbEffectCode string
 	lbColorID    int
 	lbColorIDSet bool
@@ -57,7 +56,6 @@ func init() {
 	f.IntVarP(&lbBrightness, "brightness", "b", 0, "Set brightness (0-4)")
 	f.IntVarP(&lbSpeed, "speed", "s", 0, "Set animation speed")
 	f.BoolVar(&lbOff, "off", false, "Turn off lightbar")
-	f.BoolVar(&lbRestoreF, "restore", false, "Restore saved state")
 	f.StringVar(&lbEffectCode, "effect-code", "", "Set effect by raw hex code")
 	f.IntVar(&lbColorID, "color-id", 0, "Set color by raw ID")
 
@@ -145,20 +143,6 @@ func runLightbar(cmd *cobra.Command, args []string) error {
 		}
 		_ = config.SaveLightbarState(map[string]any{"mode": actionOff})
 		fmt.Println("Lightbar off.")
-		return nil
-	}
-
-	if lbRestoreF {
-		bundle := config.LoadStateBundle()
-		lbState, ok := bundle["lightbar"].(map[string]any)
-		if !ok || lbState == nil {
-			fmt.Println("No saved lightbar state found.")
-			return nil
-		}
-		if err := restoreLightbarState(lbState, ctrl); err != nil {
-			return err
-		}
-		fmt.Println("Lightbar state restored.")
 		return nil
 	}
 
@@ -336,11 +320,8 @@ func validateLightbarArgs() error {
 	}
 
 	hasUpdate := lbEffect != "" || lbEffectCode != "" || lbColor != "" || lbColorIDSet || lbBrightSet || lbSpeedSet
-	if lbOff && (lbRestoreF || hasUpdate || debugActions > 0) {
+	if lbOff && (hasUpdate || debugActions > 0) {
 		return fmt.Errorf("--off cannot be combined with other lightbar options")
-	}
-	if lbRestoreF && (lbOff || hasUpdate || debugActions > 0) {
-		return fmt.Errorf("--restore cannot be combined with other lightbar options")
 	}
 	if hasUpdate && debugActions > 0 {
 		return fmt.Errorf("semantic lightbar options cannot be combined with --debug-* actions")

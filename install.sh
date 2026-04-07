@@ -123,8 +123,16 @@ else
     printf '  SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="8911", MODE="0666"\n'
 fi
 
+# --- Migrate old systemd service ---
+if systemctl is-active --quiet avellcc-restore.service 2>/dev/null || \
+   systemctl is-enabled --quiet avellcc-restore.service 2>/dev/null; then
+    info "Migrating old avellcc-restore.service..."
+    sudo systemctl disable --now avellcc-restore.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/avellcc-restore.service
+fi
+
 # --- Install systemd service ---
-SYSTEMD_SRC="${TMP}/systemd/avellcc-restore.service"
+SYSTEMD_SRC="${TMP}/systemd/avellcc.service"
 SYSTEMD_DIR="/etc/systemd/system"
 
 if [ -f "$SYSTEMD_SRC" ]; then
@@ -133,7 +141,18 @@ if [ -f "$SYSTEMD_SRC" ]; then
     sudo cp "$SYSTEMD_SRC" "$SYSTEMD_DIR/"
     sudo systemctl daemon-reload
     ok "systemd service installed"
-    printf "  Enable restore on boot: ${CYAN}sudo systemctl enable avellcc-restore.service${RESET}\n"
+    printf "  Enable: ${CYAN}sudo systemctl enable avellcc.service${RESET}\n"
+fi
+
+# --- Install suspend/resume hook ---
+SLEEP_SRC="${TMP}/systemd/system-sleep/avellcc"
+SLEEP_DIR="/usr/lib/systemd/system-sleep"
+
+if [ -f "$SLEEP_SRC" ]; then
+    echo ""
+    info "Installing suspend/resume hook..."
+    sudo install -Dm755 "$SLEEP_SRC" "$SLEEP_DIR/avellcc"
+    ok "suspend/resume hook installed"
 fi
 
 # --- Verify PATH ---

@@ -14,7 +14,6 @@ import (
 
 	"github.com/hugo-andrade/avellcc/internal/config"
 	"github.com/hugo-andrade/avellcc/internal/keyboard"
-	"github.com/hugo-andrade/avellcc/internal/lightbar"
 	"github.com/hugo-andrade/avellcc/internal/tui"
 )
 
@@ -33,7 +32,6 @@ var (
 	kbBrightness int
 	kbBrightSet  bool
 	kbOff        bool
-	kbRestore    bool
 	kbProfile    string
 	kbVerbose    bool
 )
@@ -58,7 +56,6 @@ func init() {
 	f.IntVarP(&kbSpeed, "speed", "s", 3, "Effect speed (0-10)")
 	f.IntVarP(&kbBrightness, "brightness", "b", 0, "Set brightness (0-10)")
 	f.BoolVar(&kbOff, "off", false, "Turn off keyboard LEDs")
-	f.BoolVar(&kbRestore, "restore", false, "Restore saved state")
 	f.StringVarP(&kbProfile, "profile", "p", "", "Load a profile JSON file")
 	f.BoolVarP(&kbVerbose, "verbose", "v", false, "Show grid positions (with keys action)")
 
@@ -119,7 +116,7 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 	defer func() { _ = ctrl.Close() }()
 
 	// No flags → interactive TUI panel
-	hasFlags := kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbOff || kbRestore || kbProfile != ""
+	hasFlags := kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbOff || kbProfile != ""
 	if !hasFlags {
 		if _, err := unix.IoctlGetTermios(int(os.Stdout.Fd()), unix.TCGETS); err != nil {
 			return fmt.Errorf("interactive TUI requires a terminal; use flags for non-interactive mode")
@@ -141,18 +138,6 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 		bundle["keyboard"] = state
 		_ = config.SaveStateBundle(bundle)
 		fmt.Println("Keyboard LEDs off.")
-		return nil
-	}
-
-	if kbRestore {
-		if len(bundle) == 0 {
-			fmt.Println("No saved state found.")
-			return nil
-		}
-		if err := restoreState(ctrl, bundle); err != nil {
-			return err
-		}
-		fmt.Println("State restored.")
 		return nil
 	}
 
@@ -266,7 +251,7 @@ func runKeyboard(cmd *cobra.Command, args []string) error {
 }
 
 func validateKeyboardArgs(action string) error {
-	hasFlags := kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbOff || kbRestore || kbProfile != ""
+	hasFlags := kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbOff || kbProfile != ""
 
 	if action != "" {
 		if action != actionKeys && kbVerbose {
@@ -290,13 +275,10 @@ func validateKeyboardArgs(action string) error {
 	if kbEffect != "" && kbColor != "" {
 		return fmt.Errorf("choose either --effect or --color")
 	}
-	if kbOff && (kbRestore || kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbProfile != "") {
+	if kbOff && (kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbProfile != "") {
 		return fmt.Errorf("--off cannot be combined with other keyboard options")
 	}
-	if kbRestore && (kbOff || kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbBrightSet || kbProfile != "") {
-		return fmt.Errorf("--restore cannot be combined with other keyboard options")
-	}
-	if kbProfile != "" && (kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbOff || kbRestore) {
+	if kbProfile != "" && (kbColor != "" || kbKey != "" || kbEffect != "" || kbSpeedSet || kbOff) {
 		return fmt.Errorf("--profile can only be combined with --brightness")
 	}
 	// No flags = launch interactive TUI (handled in runKeyboard)
@@ -393,124 +375,6 @@ func kbFirmware() error {
 	}
 	fmt.Printf("Firmware report 0x5A: %s\n", config.FormatHex(data))
 	return nil
-}
-
-func restoreState(ctrl *keyboard.ITE8295, bundle map[string]any) error {
-	kbState, _ := bundle["keyboard"].(map[string]any)
-	if kbState == nil {
-		kbState = map[string]any{}
-	}
-
-	mode, _ := kbState["mode"].(string)
-	switch mode {
-	case actionOff:
-		_ = ctrl.Off()
-	case actionEffect:
-		effect, _ := kbState[actionEffect].(string)
-		if effect != "" {
-			speed := 3
-			if s, ok := config.GetInt(kbState, "speed"); ok {
-				speed = s
-			}
-			if animID, ok := keyboard.EffectNames[strings.ToLower(effect)]; ok {
-				_ = ctrl.SetHWAnimation(animID)
-			} else {
-				swName := strings.ToLower(effect)
-				if !strings.HasPrefix(swName, "sw_") {
-					swName = "sw_" + swName
-				}
-				if fn, ok := keyboard.SoftwareEffects[swName]; ok {
-					runner := keyboard.NewEffectRunner(ctrl, 30)
-					opts := keyboard.DefaultEffectOpts()
-					opts.Speed = speed
-					runner.Start(fn, opts)
-				}
-			}
-		}
-	case "static":
-		if colorArr, ok := kbState["color"].([]any); ok && len(colorArr) == 3 {
-			r, _ := config.GetInt(map[string]any{"v": colorArr[0]}, "v")
-			g, _ := config.GetInt(map[string]any{"v": colorArr[1]}, "v")
-			b, _ := config.GetInt(map[string]any{"v": colorArr[2]}, "v")
-			_ = ctrl.SetAllKeys(byte(r), byte(g), byte(b))
-		}
-	case "profile":
-		profilePath, _ := kbState["profile"].(string)
-		if profilePath != "" {
-			_, _ = loadProfile(ctrl, profilePath)
-		}
-	}
-
-	if brightness, ok := config.GetInt(kbState, "brightness"); ok {
-		_ = ctrl.SetBrightness(brightness)
-	}
-
-	if perKey, ok := kbState["per_key"].(map[string]any); ok {
-		keymap := keyboard.LoadKeymap()
-		for keyName, colorVal := range perKey {
-			if colorArr, ok := colorVal.([]any); ok && len(colorArr) == 3 {
-				pos, found := keyboard.GetKeyPosition(keyName, keymap)
-				if found {
-					r, _ := config.GetInt(map[string]any{"v": colorArr[0]}, "v")
-					g, _ := config.GetInt(map[string]any{"v": colorArr[1]}, "v")
-					b, _ := config.GetInt(map[string]any{"v": colorArr[2]}, "v")
-					_ = ctrl.SetKeyColor(pos[0], pos[1], byte(r), byte(g), byte(b))
-				}
-			}
-		}
-	}
-
-	if lbState, ok := bundle["lightbar"].(map[string]any); ok {
-		_ = restoreLightbarState(lbState, nil)
-	}
-
-	return nil
-}
-
-func restoreLightbarState(lbState map[string]any, ctrl *lightbar.ITE8911) error {
-	if lbState == nil {
-		return nil
-	}
-
-	state := config.MergeLightbarState(lbState, nil)
-	ownsCtrl := ctrl == nil
-	if ctrl == nil {
-		ctrl = lightbar.NewITE8911(nil)
-		if err := ctrl.Open(); err != nil {
-			return err
-		}
-	}
-	if ownsCtrl {
-		defer func() { _ = ctrl.Close() }()
-	}
-
-	mode, _ := state["mode"].(string)
-	if mode == actionOff {
-		return ctrl.X58Off()
-	}
-
-	var effectCode *byte
-	var colorID *byte
-	var brightness *int
-	var speed *byte
-
-	if ec, ok := config.GetInt(state, "effect_code"); ok {
-		b := byte(ec)
-		effectCode = &b
-	}
-	if ci, ok := config.GetInt(state, "color_id"); ok {
-		b := byte(ci)
-		colorID = &b
-	}
-	if br, ok := config.GetInt(state, "brightness"); ok {
-		brightness = &br
-	}
-	if sp, ok := config.GetInt(state, "speed"); ok {
-		b := byte(sp)
-		speed = &b
-	}
-
-	return ctrl.X58Apply(effectCode, colorID, brightness, speed)
 }
 
 func loadProfile(ctrl *keyboard.ITE8295, profilePath string) (map[string]any, error) {

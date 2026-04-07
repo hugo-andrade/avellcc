@@ -1,11 +1,11 @@
 [Unit]
-Description=Restore avellcc keyboard and lightbar state
+Description=Reload avellcc keyboard and lightbar state
 After=multi-user.target systemd-udev-settle.service
 Wants=systemd-udev-settle.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/avellcc keyboard --restore
+ExecStart=/usr/lib/systemd/system-sleep/avellcc post boot
 RemainAfterExit=yes
 
 [Install]

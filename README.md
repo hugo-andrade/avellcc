@@ -107,7 +107,6 @@ avellcc keyboard --effect sw_breathing    # Software breathing
 
 avellcc keyboard --profile gaming.json    # Load profile
 avellcc keyboard --off                    # Turn off
-avellcc keyboard --restore                # Restore saved state
 
 avellcc kb -c red -b 7                    # Short alias
 ```
@@ -122,7 +121,6 @@ avellcc lightbar --effect color-wave
 avellcc lightbar --effect change-color
 avellcc lightbar --effect granular --color cyan
 avellcc lightbar --off
-avellcc lightbar --restore
 
 avellcc lb -e static -c blue -b 4 -s 3   # Short alias
 ```
@@ -177,17 +175,29 @@ JSON files in `~/.config/avellcc/profiles/`:
 }
 ```
 
-## Restore on boot
+## State reload
 
 ```bash
-sudo cp systemd/avellcc-restore.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable avellcc-restore.service
+avellcc reload                            # Reload saved keyboard and lightbar state
 ```
 
-The restore service runs `avellcc keyboard --restore`, which restores both keyboard and lightbar saved state.
+### Restore on boot
 
-> **Tip:** The quick install script sets this up automatically.
+```bash
+sudo cp systemd/avellcc.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable avellcc.service
+```
+
+### Restore on suspend/resume
+
+```bash
+sudo install -Dm755 systemd/system-sleep/avellcc /usr/lib/systemd/system-sleep/avellcc
+```
+
+Both the boot service and suspend/resume hook call `avellcc reload` to restore saved keyboard and lightbar state.
+
+> **Tip:** The quick install script sets up both automatically.
 
 ## Uninstall
 
@@ -198,10 +208,11 @@ make uninstall
 Or manually:
 
 ```bash
-sudo systemctl disable --now avellcc-restore.service
+sudo systemctl disable --now avellcc.service
 sudo rm -f /usr/local/bin/avellcc
 sudo rm -f /etc/udev/rules.d/99-avellcc.rules
-sudo rm -f /etc/systemd/system/avellcc-restore.service
+sudo rm -f /etc/systemd/system/avellcc.service
+sudo rm -f /usr/lib/systemd/system-sleep/avellcc
 sudo udevadm control --reload-rules
 sudo systemctl daemon-reload
 ```
