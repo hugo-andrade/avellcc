@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/hugo-andrade/avellcc/compare/v0.2.4...v0.3.0) (2026-04-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* --restore flag removed from keyboard and lightbar commands. Use `avellcc reload` instead.
+
+### Features
+
+* add top-level reload command and suspend/resume hook ([d149a0f](https://github.com/hugo-andrade/avellcc/commit/d149a0fb3b10996a7acd8460f5b2828ba29d7bd2))
+
 ## [0.2.4](https://github.com/hugo-andrade/avellcc/compare/v0.2.3...v0.2.4) (2026-03-08)
 
 
